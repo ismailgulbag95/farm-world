@@ -1,0 +1,152 @@
+{
+  "@@locale": "tr",
+  "gameTitle": "Farm World",
+  "startingField": "Yeni bir başlangıç",
+  "farmCredits": "Çiftlik kredisi",
+  "changeLanguage": "Dili değiştir",
+  "languageEnglish": "English",
+  "languageTurkish": "Türkçe",
+  "languageSpanish": "Español",
+  "languageGerman": "Deutsch",
+  "openingScytheTitle": "İlk balyan",
+  "openingScytheBody": "Joystick'i yukarı itip çayıra ilerle. Çimi biçmek için hareket et; balya çıkınca üzerinden geçip al.",
+  "openingMowingProgressLabel": "İlk balya ilerlemesi",
+  "openingMowerGoalLabel": "Mini makine için {bales, plural, other{# balya satışı kaldı}}",
+  "@openingMowerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "openingWorkerGoalLabel": "İşçi için {bales, plural, other{# balya satışı kaldı}}",
+  "@openingWorkerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "baleNearbyTitle": "Bir balya hazır",
+  "baleNearbyBody": "Üzerinden geçip al, sonra ahşap platforma taşı.",
+  "baleCarryTitle": "Balyanı sat",
+  "baleCarryBody": "{amount} kredi kazanmak için teslim platformuna götür.",
+  "mowerUpgradeTitle": "Mini çim biçme makinesi al",
+  "mowerUpgradeBody": "Daha hızlı ilerle ve çayırda daha geniş bir alanı biç.",
+  "workerTitle": "Makineyi devret",
+  "workerNeedClearBody": "İşçi almadan önce yerdeki ve elindeki tüm balyaları teslim et.",
+  "workerNeedFundsBody": "Balyaları satmaya devam et. İşçi almak için {amount} kredi daha gerekiyor.",
+  "workerReadyBody": "İşçi makineyi devralacak ve ilk parseli açacak.",
+  "managementTitle": "Çiftliğin otomasyona geçti",
+  "managementBody": "Başlangıç parseli ve bir ücretsiz ekim tohumu hazır.",
+  "starterPlotReadyTitle": "İlk tarlan hazır",
+  "starterPlotReadyBody": "Ücretsiz mısır tohumunu ek. İlk ürün, garantili ilkbahar ekim dönemine göre seçildi.",
+  "plantMaize": "Mısır ek",
+  "plantWheat": "Buğday ek",
+  "freeStarterSeed": "Ücretsiz başlangıç tohumu",
+  "cropGrowingTitle": "{crop} büyüyor",
+  "@cropGrowingTitle": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "cropGrowingBody": "{percent}% büyüdü · yaklaşık {minutes} dk kaldı.",
+  "@cropGrowingBody": {
+    "placeholders": {
+      "percent": { "type": "String" },
+      "minutes": { "type": "String" }
+    }
+  },
+  "cropReadyTitle": "Hasat zamanı",
+  "cropReadyBody": "{crop} hasada hazır.",
+  "@cropReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "firstTradeReadyBody": "İlk takası tamamlamak için {crop} ürününü hasat et. Başlangıç tahıl kamyonunu ve {amount} kredi alacaksın.",
+  "@firstTradeReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" },
+      "amount": { "type": "String" }
+    }
+  },
+  "harvestAndTrade": "Hasat et ve takas yap",
+  "harvestCrop": "Hasat et ve sat",
+  "firstTradeReward": "Kamyon + {amount} kredi",
+  "@firstTradeReward": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "starterTruckReceivedTitle": "İlk teslimat kamyonun",
+  "starterTruckReceivedBody": "Başlangıç tahıl kamyonu ve {amount} kredi senin. {seedCost} krediye yeniden buğday veya mısır ekebilirsin.",
+  "@starterTruckReceivedBody": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "seedCost": { "type": "String" }
+    }
+  },
+  "cropSaleValue": "Ürün değeri: {amount} kredi",
+  "@cropSaleValue": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "maizeCropName": "Mısır",
+  "wheatCropName": "Buğday",
+  "sunflowerCropName": "Ayçiçeği",
+  "potatoCropName": "Patates",
+  "chickpeaCropName": "Nohut",
+  "firstDiversityProgress": "İlk çeşitlilik rotası: {complete} / {required}",
+  "@firstDiversityProgress": {
+    "placeholders": {
+      "complete": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "firstDiversityHint": "Bir tam tahıl hasadı ve ayçiçeği ya da patatesten bir tam hasat al.",
+  "firstDiversityComplete": "İlk çeşitlilik kilometre taşı tamamlandı.",
+  "openingP2Progress": "P2 üretim kanıtı: {current} / {required} ÇK",
+  "@openingP2Progress": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "soilConditionTitle": "Toprak durumu",
+  "soilConditionValue": "{points}/100 · tahmini verim %{yieldPercent}",
+  "@soilConditionValue": {
+    "placeholders": {
+      "points": { "type": "String" },
+      "yieldPercent": { "type": "String" }
+    }
+  },
+  "soilCareRule": "Her tam hasat toprağı 1 puan düşürür. T02, {trigger} puanın altında {cost} ÇK karşılığında {correction} puan ekler.",
+  "@soilCareRule": {
+    "placeholders": {
+      "correction": { "type": "String" },
+      "trigger": { "type": "String" },
+      "cost": { "type": "String" }
+    }
+  },
+  "researchSoilCare": "Toprak bakımını araştır",
+  "soilCareAutomationOn": "Otomatik bakım: açık",
+  "soilCareAutomationOff": "Otomatik bakım: kapalı",
+  "soilCareAutomationPaused": "Otomatik toprak bakımı duraklatıldı.",
+  "soilCareAwaitingFunds": "Toprak bakımı için {amount} ÇK bekleniyor. Ekim ve hasat sürer.",
+  "@soilCareAwaitingFunds": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "researchOilseedFamily": "Yağlı tohum ailesini aç",
+  "researchRootTuberFamily": "Kök ve yumru ailesini aç",
+  "researchSunflowerCrop": "Ayçiçeği ekimini aç",
+  "researchPotatoCrop": "Patates ekimini aç",
+  "researchLegumeFamily": "Baklagil ailesini aç",
+  "researchChickpeaCrop": "Nohut ekimini aç",
+  "plantSunflower": "Ayçiçeği ek",
+  "plantPotato": "Patates ek",
+  "plantChickpeas": "Nohut ek",
+  "chickpeaArtworkAccessibility": "Nohut gelişim aşamaları",
+  "sunflowerArtworkAccessibility": "Olgun ayçiçeği tarlası",
+  "potatoArtworkAccessibility": "Olgun patates tarlası",
+  "truckArtworkAccessibility": "Başlangıç tahıl kamyonu",
+  "cropPlotAccessibility": "Başlangıç ürün tarlası",
+  "buyMower": "Mini makineyi al",
+  "hireWorker": "İşçi al",
+  "costAmount": "{amount} kredi",
+  "gameplayAccessibility": "Farm World oyunu. Tarlada hareket etmek için sanal kontrol çubuğunu kullan.",
+  "joystickAccessibility": "Sanal hareket kontrol çubuğu",
+  "workerArtworkAccessibility": "Çiftlik işçisi",
+  "mowerArtworkAccessibility": "Mini çim biçme makinesi"
+}

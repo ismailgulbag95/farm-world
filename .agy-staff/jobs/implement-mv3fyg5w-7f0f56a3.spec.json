@@ -1,0 +1,22 @@
+{
+  "resolved": {
+    "mode": "implement",
+    "model": "gemini-3.8-flash-high",
+    "profile": "unrestricted",
+    "profileSource": "inherited",
+    "background": true,
+    "timeout": "60m",
+    "conversation": "c60e6dc2-8a43-4185-8470-8b6b46a54e0d",
+    "parentJobId": "implement-mv3fvom5-c570a31c",
+    "originalCwd": "D:\\github\\farm world"
+  },
+  "prompt": "Follow-up in the same conversation:\n\nMake two narrowly scoped review corrections to the FarmCalendar domain model. First, clarify in its API documentation that the supplied elapsed Duration is measured from the save's first successful planting, because docs/game-design-brief.md:87 states the personal 18-hour cycle begins then and continues offline. FarmCalendar remains a pure mapper and must not invent/store the planting event or its timestamp; the caller provides elapsed time since that anchor. Second, remove the public FarmCalendar.raw const constructor: it bypasses all invariants and no code uses it. Preserve the normal factories and private constructor. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Re-run flutter test and flutter analyze. Preserve unrelated workspace contents, do not commit or publish.",
+  "prompt_source": {
+    "kind": "followup",
+    "task": "Make two narrowly scoped review corrections to the FarmCalendar domain model. First, clarify in its API documentation that the supplied elapsed Duration is measured from the save's first successful planting, because docs/game-design-brief.md:87 states the personal 18-hour cycle begins then and continues offline. FarmCalendar remains a pure mapper and must not invent/store the planting event or its timestamp; the caller provides elapsed time since that anchor. Second, remove the public FarmCalendar.raw const constructor: it bypasses all invariants and no code uses it. Preserve the normal factories and private constructor. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Re-run flutter test and flutter analyze. Preserve unrelated workspace contents, do not commit or publish."
+  },
+  "opts": {
+    "json": false
+  },
+  "cwd": "D:\\github\\farm world"
+}

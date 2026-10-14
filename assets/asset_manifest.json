@@ -1,0 +1,1529 @@
+[
+  {
+    "asset_id": "soil_condition_sprout_v1",
+    "name": "Toprak durumu simgesi",
+    "asset_type": "icon",
+    "file_path": "assets/images/ui/soil-condition-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 230,
+      "height": 230
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 230,
+        "height": 230
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a single polished game UI inventory icon for Farm World: a small rich dark-brown soil mound with a fresh two-leaf green sprout growing from its center, a few softly painted golden soil flecks and tiny roots visible at the mound edge. Warm hand-painted miniature farm atlas illustration, readable silhouette at 32 px, soft top-left light, clean restrained detail, centered, front three-quarter view, no outline badge, no border, no lettering, no numbers, no background, transparent alpha. Square 1:1 composition with generous transparent padding."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Used in the management HUD beside the starter plot soil condition and T02 automation control.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_world_style_anchor_v1",
+    "name": "Stil referansı",
+    "asset_type": "style_reference",
+    "file_path": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1672,
+      "height": 941
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_reference"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_reference"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_reference"
+    },
+    "style_reference": null,
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Ilıman başlangıç çiftliğini gösteren, üstten 2.5D, geniş kadrajlı, sıcak ve hafif dokulu resimli atlas/minyatür çiftlik; buğday, mısır, çim, doğal parsel kenarları ve çiftlik yolları; arayüz/metin yok."
+    },
+    "locale_text_keys": [],
+    "status": "concept_awaiting_user_review"
+  },
+  {
+    "asset_id": "farm_world_app_icon_v1",
+    "name": "Farm World uygulama simgesi",
+    "asset_type": "icon",
+    "file_path": "assets/images/brand/farm-world-app-icon-master-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_icon"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a premium mobile game app icon, square 1:1, full-bleed opaque artwork with no border and no rounded mask. Farm World is a warm, hand-painted, softly textured 2.5D idle farm management game viewed from above. Compose a tiny charming farm diorama that reads clearly at very small icon size: two bold curved crop plots, one rich golden wheat field and one fresh green maize field, separated by a simple pale dirt lane; a small friendly terracotta-red grain truck with cream rails sits prominently on the lane, seen from a high three-quarter overhead angle. Surround with lush meadow green and a few simple soft tree shapes at the edges. Keep the truck silhouette and crop color blocks large, simple, high contrast, central, and uncluttered. Gentle daylight, painterly illustration matching polished cozy strategy game art, warm natural palette, crisp readable forms. Absolutely no text, letters, numbers, logos, UI, badges, realistic photography, perspective horizon, gradients that obscure edges, or transparent areas."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Source for iOS AppIcon.appiconset and LaunchImage, Android mipmap launcher icons and launch screen, and the 1024px App Store / 512px Google Play store artwork; resized with high-quality bicubic interpolation.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "character_youthful_scythe_poses_v1",
+    "name": "Genç oraklı karakter",
+    "asset_type": "character",
+    "file_path": "assets/visual-concepts/pilot/character-youthful-scythe-poses-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1448,
+      "height": 1086
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "pending_sprite_extraction"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "pending_sprite_extraction"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "pending_sprite_extraction"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Genç görünen çiftlik işçisi; ten rengi kep, krem gömlek, koyu mavi tulum, kahverengi bot ve bel çantası, küçük el orağı. Dört ana yöne bakan 4 sütun × 3 satır poz sayfası: yürüme, biçmeye hazırlanma ve biçme hareketi. Şeffaf boşluklar, metin veya çerçeve yok. Kullanıcı ilk genç tasarımı tercih etti; yetişkin revizyon ve yüzü/yaş algısını değiştiren alfa temizleme çıktısı kullanılmıyor."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Source/reference for the active four-direction 4×4 overhead mowing atlas; kept as provenance and not loaded at runtime.",
+    "status": "concept_source_reference"
+  },
+  {
+    "asset_id": "crop_cereal_early_v1",
+    "name": "Tahıl — erken evre",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-cereal-early-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_texture"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_texture"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_texture"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Toprağın görünür kaldığı seyrek, yeni filizlenmiş tahıl sıraları; aile bazlı ortak gelişim dokusu."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Flutter/Flame açılış tarlasındaki ilk büyüme evresinde gösterilir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_cereal_mid_v1",
+    "name": "Tahıl — orta evre",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-cereal-mid-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_texture"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_texture"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_texture"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Erken evreden daha sık ve yüksek, henüz olgunlaşmamış tahıl; aile bazlı ortak gelişim dokusu."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Flutter/Flame açılış tarlasındaki orta büyüme evresinde gösterilir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_maize_mature_v1",
+    "name": "Mısır — olgun tarla",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-maize-mature-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_texture"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_texture"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_texture"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Aynı palet ve kamera hissinde, olgun yeşil mısır sıraları ve seçilebilir koçanlarla kare parsel yüzeyi; sınır/çerçeve ve yazı yok."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_wheat_mature_v1",
+    "name": "Buğday — olgun tarla",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-wheat-mature-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_texture"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_texture"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_texture"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Aynı stil referansında, olgun ve hasada hazır altın renkli buğday tarlasını gösteren kare, tekrarlanabilir parsel yüzeyi; parsel sınırı/çerçevesi ve yazı yok."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "vehicle_mini_mower_v1",
+    "name": "Mini biçme makinesi",
+    "asset_type": "vehicle",
+    "file_path": "assets/visual-concepts/pilot/vehicle-mini-mower-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "pending_sprite_extraction"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "pending_sprite_extraction"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_reference"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create one original reusable game asset: a compact early-game ride-on mini lawn mower for a warm, hand-painted, slightly textured 2.5D farm-management game. High three-quarter overhead camera consistent with a top-down map, with the front deck and seat clearly readable at small mobile size. Charming practical design: muted sage-green body, cream metal details, small black tires, simple steering wheel, visible mowing deck. Isolated cutout on a genuinely transparent background, centered, complete silhouette with comfortable transparent padding. No person, no grass patch, no ground plane, no cast shadow, no text, no logo, no border, no extra objects. Keep the form simple and visually readable as a tiny vehicle icon while retaining painterly material detail. Match the warm natural palette and hand-painted illustration quality of the referenced farm map; do not reproduce the whole map."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "vehicle_starter_grain_truck_v1",
+    "name": "İlk takas kamyonu",
+    "asset_type": "vehicle",
+    "file_path": "assets/visual-concepts/pilot/vehicle-starter-grain-truck-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_static_ui_image"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_ui_image"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create one original reusable game asset: the first small farm trade truck, an old but well-kept compact flatbed grain truck for a warm, hand-painted 2.5D farm-management game. High three-quarter overhead camera matching a top-down farm map. Short muted terracotta-red cab, weathered cream side rails, small open cargo bed carrying a modest tidy load of tied wheat sacks, sturdy dark tires, simple friendly silhouette. The full truck is visible, angled diagonally, isolated as a clean cutout with generous transparent padding. No person, no road, no farm scene, no floor, no cast shadow, no text, no logo, no border, no extra objects. Painterly surface detail, warm restrained palette, mobile-scale readability; use the reference only for art style and color mood."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "İlk takas tamamlandığında Flutter yönetim kartında ödül görseli olarak gösterilir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "worker_employee_turnaround_v1",
+    "name": "Devralan işçi",
+    "asset_type": "character",
+    "file_path": "assets/visual-concepts/pilot/worker-employee-turnaround-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1448,
+      "height": 1086
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "pending_sprite_extraction"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "pending_sprite_extraction"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_applicable_static_reference"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a clean 2-by-2 character reference sheet for a reusable worker in the same warm, hand-painted 2.5D farm game as the references. This is a different person from the youthful scythe protagonist: a clearly adult young woman farm employee, practical and friendly, auburn hair in a short braid under a muted olive work cap, cream shirt, moss-green work jacket, brown work trousers, sturdy boots, small tool pouch. Natural adult proportions with readable silhouette at small mobile-map scale. Four consistent views: front, back, left three-quarter, right three-quarter; relaxed standing work-ready posture in all four cells. Keep each figure complete, identical clothing and body proportions, evenly spaced with wide transparent gaps, no touching or overlap. Isolated figures on a genuinely transparent background, no floor, no shadows, no text, no labels, no borders, no extra characters or props. Match the painterly surface quality, warm restrained palette, and soft hand-painted edges of the references; do not make a whole scene."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "opening_meadow_ground_v1",
+    "name": "Açılış çayır zemini",
+    "asset_type": "texture",
+    "file_path": "assets/images/opening/meadow-ground-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": "not_applicable",
+      "status": "not_applicable_static_asset"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_asset"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Use case: stylized-concept\nAsset type: seamless game texture for a Flutter/Flame mobile game\nInput images: Image 1 is a style reference only; match its warm hand-painted surface quality, soft natural greens, gentle top-down 2.5D feel, and restrained detail.\nPrimary request: Create a square, truly seamless, tileable top-down meadow ground texture to serve as the base for an opening farm mowing field. The surface should remain readable when repeated across a large rectangular play area.\nScene/backdrop: only a lush temperate farm meadow surface, no horizon or perspective.\nSubject: varied short and medium green grass, a few tiny white clover blossoms, subtle patches of warm earth and lighter cuttable grass; keep the middle uncluttered enough for a small character sprite and gameplay marks.\nStyle/medium: painterly illustrated miniature farm atlas, lightly textured brushwork, polished production game asset.\nComposition/framing: flat overhead view; tile must connect seamlessly at all four edges with no visible seams, large objects, directional gradients, or focal center.\nLighting/mood: soft even daylight, warm and inviting.\nColor palette: muted meadow greens, sage, warm leaf greens, tiny cream-white clover accents.\nMaterials/textures: delicate painted blades and soft organic variation; no repeated obvious motifs.\nConstraints: no text, letters, numbers, UI, borders, fence, paths, crop rows, buildings, characters, tools, props, or cast shadows; no transparent holes; keep strong edge-to-edge continuity."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "opening_mown_meadow_v1",
+    "name": "Biçilmiş çayır dokusu",
+    "asset_type": "texture",
+    "file_path": "assets/images/opening/mown-meadow-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1254,
+      "height": 1254
+    },
+    "alpha": false,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": "not_applicable",
+      "status": "not_applicable_static_asset"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_asset"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Use case: stylized-concept\nAsset type: seamless top-down game texture for a Flutter/Flame mobile farm\nInput images: Image 1 is a style reference only; match its warm hand-painted 2.5D miniature-farm texture.\nPrimary request: A square seamlessly tileable close-up ground texture of freshly mown meadow, suitable to appear in small rounded patches over an uncut grass field as a scythe passes.\nScene/backdrop: flat overhead ground, no horizon or perspective.\nSubject: very short cut grass with visible soft green clippings, a few tiny pale straw flecks, and small glimpses of warm earth; clearly shorter and calmer than the lush meadow reference.\nStyle/medium: painterly illustrated game texture with subtle brushwork, production-ready and mobile-friendly.\nComposition/framing: evenly detailed edge-to-edge texture, no object or large focal point, seamless across every edge.\nLighting/mood: soft even daylight.\nColor palette: muted olive, sage, warm lawn green, small restrained gold flecks.\nMaterials/textures: short, freshly cut grass surface, fine and natural.\nConstraints: no text, no UI, no border, no clover clusters, no tools, no character, no bale, no path, no fence, no crop rows, no shadows, no transparent holes."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "opening_sale_platform_v1",
+    "name": "Hasat teslim platformu",
+    "asset_type": "sprite",
+    "file_path": "assets/images/opening/sale-platform-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.5,
+      "coordinate_system": "normalized_asset_space",
+      "status": "runtime_center"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_asset"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Use case: stylized-concept\nAsset type: reusable isolated game sprite for a top-down 2.5D mobile farm game\nInput images: Image 1 is a style reference only; match its warm hand-painted miniature-farm rendering and restrained natural palette.\nPrimary request: A compact farm-gate receiving platform where a player can leave a harvested straw bale for sale.\nSubject: a low rectangular wooden receiving deck made of worn honey-brown planks, slightly elevated on short legs, with a simple open-sided cream-painted produce rail along the back edge and one small neat burlap sack tucked at one side. Keep the main deck clear and unobstructed for gameplay.\nStyle/medium: polished hand-painted illustrated game sprite with readable painterly texture.\nComposition/framing: elevated three-quarter overhead view consistent with a top-down farm map; platform wider than tall, centered, complete silhouette, generous transparent padding.\nLighting/mood: soft consistent daylight with a subtle painted contact shadow contained inside the silhouette.\nColor palette: warm honey wood, cream, muted leaf green, small terracotta accent.\nMaterials/textures: visible wood grain and plank divisions, lightly weathered surfaces.\nConstraints: transparent pixels around the isolated object, no ground plane, no grass patch, no cast shadow outside the sprite, no people, no vehicle, no loose objects, no text, no letters, no numbers, no signs, no logos, no border, no UI."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "opening_straw_bale_v1",
+    "name": "Toplanabilir saman balyası",
+    "asset_type": "sprite",
+    "file_path": "assets/images/opening/straw-bale-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.5,
+      "coordinate_system": "normalized_asset_space",
+      "status": "runtime_center"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_static_asset"
+    },
+    "animation": {
+      "frame_count": null,
+      "frame_size_px": null,
+      "fps": null,
+      "status": "not_animated"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Use case: stylized-concept\nAsset type: reusable small game sprite for a top-down 2.5D mobile farm game\nInput images: Image 1 is a style reference only; match its warm painted illustration, soft edges, and natural colors.\nPrimary request: A single compact tied bundle of freshly cut meadow grass and straw, the collectible item produced by the youthful hand-mowing farm worker.\nSubject: one small tidy rectangular bale, gently rounded corners, compressed gold straw with two clear dark twine loops around it; readable silhouette at tiny mobile-map scale.\nStyle/medium: polished painterly illustrated game asset with tactile fibers and clear silhouette.\nComposition/framing: elevated three-quarter overhead view, centered, complete object with generous transparent padding, turned slightly diagonal.\nLighting/mood: soft daylight with subtle highlights.\nColor palette: warm hay gold, pale straw, muted olive, deep brown twine.\nMaterials/textures: hand-painted fine straw strands, not photorealistic.\nConstraints: exactly one bale; genuine transparent background; no floor, ground plane, checkerboard, cast shadow outside the object, person, tools, crop field, vehicle, UI, text, labels, logo, border, or extra props."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_sunflower_mature_v1",
+    "name": "Ayçiçeği — olgun tarla",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-sunflower-mature-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1374,
+      "height": 1145
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1374,
+        "height": 1145
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create one polished, production-ready game sprite: a small mature sunflower crop patch for the mobile game Farm World. Warm, gently textured illustrated mini-farm atlas style, overhead 2.5D with a slight three-quarter tilt, consistent with a cozy hand-painted miniature farm. Show a compact clump of 3 sturdy sunflower plants with vivid golden flower heads, rich brown seed centers, layered green leaves, and a subtle natural ground shadow. Clear silhouette and readable at 48 px. Isolated centered cutout, transparent background, no pot, no frame, no UI, no text, no labels, no numbers, no watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_potato_mature_v1",
+    "name": "Patates — olgun tarla",
+    "asset_type": "crop",
+    "file_path": "assets/visual-concepts/pilot/crop-potato-mature-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1536,
+        "height": 1024
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create one polished, production-ready game sprite: a small mature potato crop patch for the mobile game Farm World. Warm, gently textured illustrated mini-farm atlas style, overhead 2.5D with a slight three-quarter tilt, consistent with a cozy hand-painted miniature farm. Show a compact mound with dense leafy potato tops and several freshly harvested-looking golden-brown potatoes partly revealed among rich dark soil at the front edge; make it read immediately as a potato crop, not a generic shrub. Clear silhouette and readable at 48 px. Isolated centered cutout, transparent background, no basket, no frame, no UI, no text, no labels, no numbers, no watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_sunflower_early_v1",
+    "name": "Ayçiçeği — filiz",
+    "asset_type": "crop_growth_stage",
+    "file_path": "assets/visual-concepts/pilot/crop-sunflower-early-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1536,
+        "height": 1024
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "A production-ready early seedling sprite for Farm World: five very small sunflower sprouts just emerged in a compact patch of rich tilled dark earth. Each plant is only a few centimeters tall with thin green stems and two to four small rounded leaves; absolutely no buds, no flower heads, no large plants. Warm, gently textured hand-painted mini-farm illustration, overhead 2.5D slight three-quarter tilt, clean organic field-patch silhouette with transparent background and subtle soil edge shadow. Readable as tiny sunflowers at 48 px. No text, labels, frame, UI, tools, pot, or watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_sunflower_mid_v1",
+    "name": "Ayçiçeği — gelişiyor",
+    "asset_type": "crop_growth_stage",
+    "file_path": "assets/visual-concepts/pilot/crop-sunflower-mid-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1312,
+      "height": 1199
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1312,
+        "height": 1199
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a production-ready early-growth sunflower crop sprite for Farm World. Warm gently textured hand-painted farm atlas art, overhead 2.5D with a slight three-quarter tilt. Show a compact crop patch of small sunflower seedlings: several short green stems, pairs of bright leaves, a few unopened tiny buds, no yellow open flowers. Rich tilled dark earth is visible between sprouts. Transparent background outside the small organic field patch, subtle edge shadow, clear silhouette readable at 48 px, no text, no labels, no UI, no frame, no watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_potato_early_v1",
+    "name": "Patates — filiz",
+    "asset_type": "crop_growth_stage",
+    "file_path": "assets/visual-concepts/pilot/crop-potato-early-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1536,
+        "height": 1024
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create one small early seedling patch sprite for Farm World: several newly emerged potato plants just above rich dark tilled soil. Each plant has short stems and only a few small, rounded compound leaves; keep the foliage sparse and low, with no tubers, no flowers, and no large mature leaves. Warm hand-painted illustrated mini-farm art, overhead 2.5D slight three-quarter tilt, textured soil patch with clean organic edges and genuine transparent background outside it. Readable at tiny mobile field scale. No text, labels, frame, UI, tools, basket, pot, or watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_potato_mid_v1",
+    "name": "Patates — gelişiyor",
+    "asset_type": "crop_growth_stage",
+    "file_path": "assets/visual-concepts/pilot/crop-potato-mid-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1536,
+      "height": 1024
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_sprite_anchor"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_sprite"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 1536,
+        "height": 1024
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a production-ready early-growth potato crop sprite for Farm World. Show five small newly emerged potato plants in a compact patch of rich tilled dark soil. Low short green stems with a few clusters of small rounded leaves; no flowers and no visible potatoes yet. Warm, gently textured hand-painted mini-farm atlas art, overhead 2.5D with a slight three-quarter tilt. Organic field-patch silhouette, transparent background outside the patch, subtle soil edge shadow, readable at 48 px. No text, labels, frame, UI, basket, tools, pot, or watermark."
+    },
+    "locale_text_keys": [],
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "crop_chickpea_stages_v1",
+    "name": "Nohut — üç büyüme aşaması",
+    "asset_type": "crop_sprite_sheet",
+    "file_path": "assets/visual-concepts/pilot/crop-chickpea-stages-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 2172,
+      "height": 724
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.9,
+      "coordinate_system": "normalized_top_left",
+      "status": "estimated_shared_stage_baseline"
+    },
+    "atlas": {
+      "file": "assets/visual-concepts/pilot/crop-chickpea-stages-v1.png",
+      "x": 0,
+      "y": 0,
+      "width": 2172,
+      "height": 724,
+      "status": "three_equal_horizontal_stage_cells_724x724"
+    },
+    "animation": {
+      "frame_count": 3,
+      "frame_size_px": {
+        "width": 724,
+        "height": 724
+      },
+      "fps": null,
+      "status": "static_early_mid_mature_growth_stages"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a production-ready horizontal sprite sheet for a warm, hand-painted 2.5D farming game called Farm World. Exact composition: three equal-width vertical panels arranged left-to-right, no borders and no text. Each panel contains one isolated chickpea plant seen from a consistent three-quarter top-down farm-game camera, same scale and grounded baseline: panel 1 an early small seedling with a few leaves; panel 2 a healthy mid-growth leafy chickpea plant with delicate pale blossoms; panel 3 a mature chickpea plant with clearly visible pale green pods. Keep each plant fully inside its own third with generous transparent spacing between silhouettes. Distinct chickpea leaves and pods, readable at small mobile-game size. Painterly semi-realistic game asset matching cozy illustrated mobile farm art, warm daylight, crisp silhouette, nuanced greens, restrained gold highlights. Transparent background; no soil tile, no pot, no UI, no shadow disk, no frame, no labels, no extra plants."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Single generated image is sampled as three separate 724 px stages in the starter plot; the full strip is used as the planting-card artwork.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "scythe_mowing_overhead_v1",
+    "name": "Üstten görünüşlü orak biçme animasyonu",
+    "asset_type": "character_animation",
+    "file_path": "assets/visual-concepts/pilot/scythe-mowing-overhead-v1.png",
+    "format": "png",
+    "dimensions_px": {
+      "width": 1448,
+      "height": 1086
+    },
+    "alpha": true,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.65,
+      "coordinate_system": "normalized_top_left",
+      "status": "shared_frame_center"
+    },
+    "atlas": {
+      "file": "assets/visual-concepts/pilot/scythe-mowing-overhead-v1.png",
+      "x": 0,
+      "y": 0,
+      "width": 1448,
+      "height": 1086,
+      "status": "four_direction_columns_by_four_swing_phases"
+    },
+    "animation": {
+      "frame_count": 16,
+      "frame_size_px": {
+        "width": 362,
+        "height": 271.5
+      },
+      "fps": 6,
+      "status": "looping_four_phase_mowing_cycle"
+    },
+    "style_reference": "assets/visual-concepts/pilot/character-youthful-scythe-poses-v1.png",
+    "prompt": {
+      "type": "exact_prompt",
+      "is_exact": true,
+      "text": "Create a polished, game-ready 2D sprite sheet to replace the mowing animation for the SAME youthful farmhand character shown in the reference: same tan flat cap, cream rolled-sleeve shirt, navy-blue overalls, brown boots, and curved hand scythe. Preserve identity, colors, friendly storybook painterly style, and realistic proportions from the reference. The camera must be TRUE VERTICAL TOP-DOWN / overhead, orthographic: looking straight down at the character and ground, no horizon, no isometric tilt, no diagonal three-quarter side view, no profile angle, no perspective. This is a clean transparent PNG sprite atlas with exactly 4 equal columns and 4 equal rows, total 16 cells, each cell showing one full character at the same scale and centered, with comfortable transparent padding. No cell borders, grid lines, labels, symbols, shadows outside cells, background, grass, or text. Columns are facing directions in this exact order: north/up, west/left, south/down, east/right. Rows are one continuous mowing cycle in this exact order: 1) ready stance with scythe held back, 2) raising and beginning the pull, 3) powerful low sweeping cutting stroke across the grass, blade extended and clearly visible, 4) follow-through and recovery returning to ready. Every row must show a visibly different phase; the scythe and hands move through the arc so it reads as repeated active cutting rather than a static pose. Keep the body/feet/hat orientation consistent with each column and phase; show the cap and shoulders clearly from overhead. Crisp clean silhouette and transparent edges, suitable for frame-by-frame animation in a mobile game."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "4×4 atlas sampled by Flame; each row advances continuously at 6 fps while the cutting point ahead of the player is on uncut grass. Display aspect ratio preserves the 4:3 atlas cells.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_wheat_flour_v1",
+    "name": "Buğday unu ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/wheat_flour.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a cream linen flour sack with a wooden scoop and wheat kernels. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_cornmeal_v1",
+    "name": "Mısır unu ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/cornmeal.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a bowl of golden cornmeal beside a short corn cob and kernels. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_sunflower_oil_v1",
+    "name": "Ayçiçek yağı ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/sunflower_oil.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a clear bottle of golden sunflower oil with a sunflower head. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_potato_starch_v1",
+    "name": "Patates nişastası ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/potato_starch.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a small jar of white potato starch beside fresh potatoes. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_chickpea_flour_v1",
+    "name": "Nohut unu ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/chickpea_flour.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a ceramic bowl of chickpea flour beside whole chickpeas. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_packed_potatoes_v1",
+    "name": "Paketlenmiş patates ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/packed_potatoes.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; an open woven crate of fresh red and gold potatoes. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_fresh_eggs_v1",
+    "name": "Yumurta ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/fresh_eggs.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; three fresh brown and cream eggs in a straw nest. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_goat_milk_v1",
+    "name": "Keçi sütü ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/goat_milk.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a glass bottle of goat milk beside a clover sprig. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_honey_v1",
+    "name": "Bal ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/honey.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a glass jar of amber honey with a wooden dipper. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_wool_v1",
+    "name": "Yün ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/wool.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a soft off-white fleece bundle tied with natural twine. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_cow_milk_v1",
+    "name": "Süt ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/cow_milk.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a glass milk bottle with blue cap and a clover leaf. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_greenhouse_vegetables_v1",
+    "name": "Sera sebzesi ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/greenhouse_vegetables.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a green crate of tomato, peppers, lettuce and cucumber. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  },
+  {
+    "asset_id": "farm_product_orchard_fruit_v1",
+    "name": "Bahçe meyvesi ürün ikonu",
+    "asset_type": "inventory_icon",
+    "file_path": "assets/images/products/orchard_fruit.webp",
+    "format": "webp",
+    "dimensions_px": {
+      "width": 256,
+      "height": 256
+    },
+    "alpha": true,
+    "pivot": {
+      "x": null,
+      "y": null,
+      "coordinate_system": null,
+      "status": "not_applicable_icon"
+    },
+    "atlas": {
+      "file": null,
+      "x": null,
+      "y": null,
+      "width": null,
+      "height": null,
+      "status": "not_applicable_standalone_icon"
+    },
+    "animation": {
+      "frame_count": 1,
+      "frame_size_px": {
+        "width": 256,
+        "height": 256
+      },
+      "fps": null,
+      "status": "static"
+    },
+    "style_reference": "assets/visual-concepts/farm-world-style-anchor-v1.png",
+    "prompt": {
+      "type": "prompt_summary",
+      "is_exact": false,
+      "text": "Tek kare, kare biçimli şeffaf envanter ikonu; a woven basket with apple, pear, plum and green leaves. Doğrudan üstten ortografik görünüş, sıcak elde boyanmış çiftlik simülasyonu stili, sade siluet, yazı/logo/çerçeve yok."
+    },
+    "locale_text_keys": [],
+    "technical_notes": "Ambarda ve pazar ürün kartlarında küçük ölçekte gösterilir; PNG kaynak 256 px WebP olarak optimize edilmiştir.",
+    "status": "integrated_game_prototype"
+  }
+]

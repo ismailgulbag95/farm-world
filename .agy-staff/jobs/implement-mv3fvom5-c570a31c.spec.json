@@ -1,0 +1,22 @@
+{
+  "resolved": {
+    "mode": "implement",
+    "model": "gemini-3.8-flash-high",
+    "profile": "unrestricted",
+    "profileSource": "inherited",
+    "background": true,
+    "timeout": "60m",
+    "conversation": "c60e6dc2-8a43-4185-8470-8b6b46a54e0d",
+    "parentJobId": "implement-mv3fpadp-09ec8962",
+    "originalCwd": "D:\\github\\farm world"
+  },
+  "prompt": "Follow-up in the same conversation:\n\nReview and fix a correctness issue in your previous FarmCalendar implementation. In lib/game/domain/farm_calendar.dart, resolve currently adds the Southern Hemisphere shift to the full elapsed.inMicroseconds before applying modulo. A valid very large non-negative Duration (near the largest signed 64-bit microsecond value) can overflow during that addition. Normalize elapsed modulo yearDuration first, then add the 9h shift and modulo again. Add a focused regression test using Duration(microseconds: 0x7fffffffffffffff) for both hemispheres, asserting valid deterministic year/season state and no exception. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Preserve all other workspace contents. Run the focused calendar tests and flutter analyze, then report exact results. Do not commit or publish.",
+  "prompt_source": {
+    "kind": "followup",
+    "task": "Review and fix a correctness issue in your previous FarmCalendar implementation. In lib/game/domain/farm_calendar.dart, resolve currently adds the Southern Hemisphere shift to the full elapsed.inMicroseconds before applying modulo. A valid very large non-negative Duration (near the largest signed 64-bit microsecond value) can overflow during that addition. Normalize elapsed modulo yearDuration first, then add the 9h shift and modulo again. Add a focused regression test using Duration(microseconds: 0x7fffffffffffffff) for both hemispheres, asserting valid deterministic year/season state and no exception. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Preserve all other workspace contents. Run the focused calendar tests and flutter analyze, then report exact results. Do not commit or publish."
+  },
+  "opts": {
+    "json": false
+  },
+  "cwd": "D:\\github\\farm world"
+}

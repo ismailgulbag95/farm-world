@@ -1,0 +1,152 @@
+{
+  "@@locale": "en",
+  "gameTitle": "Farm World",
+  "startingField": "A fresh start",
+  "farmCredits": "Farm credits",
+  "changeLanguage": "Change language",
+  "languageEnglish": "English",
+  "languageTurkish": "Türkçe",
+  "languageSpanish": "Español",
+  "languageGerman": "Deutsch",
+  "openingScytheTitle": "Your first bale",
+  "openingScytheBody": "Push the joystick up into the meadow. Keep moving to cut grass; walk over each bale to collect it.",
+  "openingMowingProgressLabel": "First bale progress",
+  "openingMowerGoalLabel": "Mini mower: {bales, plural, one{# bale sale left} other{# bale sales left}}",
+  "@openingMowerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "openingWorkerGoalLabel": "Worker: {bales, plural, one{# bale sale left} other{# bale sales left}}",
+  "@openingWorkerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "baleNearbyTitle": "A bale is ready",
+  "baleNearbyBody": "Walk over it, then carry it to the wooden platform.",
+  "baleCarryTitle": "Sell your bale",
+  "baleCarryBody": "Take it to the receiving platform to earn {amount} credits.",
+  "mowerUpgradeTitle": "Bring in a mini mower",
+  "mowerUpgradeBody": "Move faster and cut a wider path through the meadow.",
+  "workerTitle": "Hand over the mower",
+  "workerNeedClearBody": "Sell every bale on the ground or in your hands before hiring a worker.",
+  "workerNeedFundsBody": "Keep selling bales. You need {amount} more credits to hire a worker.",
+  "workerReadyBody": "Your worker will take over the mower and unlock the first plot.",
+  "managementTitle": "Your farm is automated",
+  "managementBody": "The starting plot and one free crop seed are ready.",
+  "starterPlotReadyTitle": "Your first field is ready",
+  "starterPlotReadyBody": "Plant the free maize seed. The first crop is chosen for the guaranteed spring planting window.",
+  "plantMaize": "Plant maize",
+  "plantWheat": "Plant wheat",
+  "freeStarterSeed": "Free starter seed",
+  "cropGrowingTitle": "{crop} is growing",
+  "@cropGrowingTitle": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "cropGrowingBody": "{percent}% grown · about {minutes} min left.",
+  "@cropGrowingBody": {
+    "placeholders": {
+      "percent": { "type": "String" },
+      "minutes": { "type": "String" }
+    }
+  },
+  "cropReadyTitle": "Time to harvest",
+  "cropReadyBody": "{crop} is ready for harvest.",
+  "@cropReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "firstTradeReadyBody": "Harvest {crop} to complete your first trade. You will receive the starter grain truck and {amount} credits.",
+  "@firstTradeReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" },
+      "amount": { "type": "String" }
+    }
+  },
+  "harvestAndTrade": "Harvest and trade",
+  "harvestCrop": "Harvest and sell",
+  "firstTradeReward": "Truck + {amount} credits",
+  "@firstTradeReward": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "starterTruckReceivedTitle": "Your first delivery truck",
+  "starterTruckReceivedBody": "The starter grain truck and {amount} credits are yours. Plant wheat or maize again for {seedCost} credits.",
+  "@starterTruckReceivedBody": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "seedCost": { "type": "String" }
+    }
+  },
+  "cropSaleValue": "Crop value: {amount} credits",
+  "@cropSaleValue": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "maizeCropName": "Maize",
+  "wheatCropName": "Wheat",
+  "sunflowerCropName": "Sunflower",
+  "potatoCropName": "Potato",
+  "chickpeaCropName": "Chickpea",
+  "firstDiversityProgress": "First diversity route: {complete} / {required}",
+  "@firstDiversityProgress": {
+    "placeholders": {
+      "complete": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "firstDiversityHint": "Harvest one full grain crop and either sunflowers or potatoes.",
+  "firstDiversityComplete": "First diversity milestone complete.",
+  "openingP2Progress": "P2 production: {current} / {required} credits",
+  "@openingP2Progress": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "soilConditionTitle": "Soil condition",
+  "soilConditionValue": "{points}/100 · estimated yield {yieldPercent}%",
+  "@soilConditionValue": {
+    "placeholders": {
+      "points": { "type": "String" },
+      "yieldPercent": { "type": "String" }
+    }
+  },
+  "soilCareRule": "Each full harvest lowers soil by 1 point. T02 restores {correction} below {trigger} for {cost} credits.",
+  "@soilCareRule": {
+    "placeholders": {
+      "correction": { "type": "String" },
+      "trigger": { "type": "String" },
+      "cost": { "type": "String" }
+    }
+  },
+  "researchSoilCare": "Research soil care",
+  "soilCareAutomationOn": "Auto-care: On",
+  "soilCareAutomationOff": "Auto-care: Off",
+  "soilCareAutomationPaused": "Automatic soil care is paused.",
+  "soilCareAwaitingFunds": "Soil care is waiting for {amount} credits. Planting and harvesting continue.",
+  "@soilCareAwaitingFunds": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "researchOilseedFamily": "Unlock oilseed family",
+  "researchRootTuberFamily": "Unlock root and tuber family",
+  "researchSunflowerCrop": "Unlock sunflower crop",
+  "researchPotatoCrop": "Unlock potato crop",
+  "researchLegumeFamily": "Unlock legume family",
+  "researchChickpeaCrop": "Unlock chickpea crop",
+  "plantSunflower": "Plant sunflower",
+  "plantPotato": "Plant potatoes",
+  "plantChickpeas": "Plant chickpeas",
+  "chickpeaArtworkAccessibility": "Chickpea growth stages",
+  "sunflowerArtworkAccessibility": "Mature sunflower crop patch",
+  "potatoArtworkAccessibility": "Mature potato crop patch",
+  "truckArtworkAccessibility": "Starter grain truck",
+  "cropPlotAccessibility": "Starter crop field",
+  "buyMower": "Buy mini mower",
+  "hireWorker": "Hire worker",
+  "costAmount": "{amount} credits",
+  "gameplayAccessibility": "Farm World gameplay. Use the virtual joystick to move the worker around the field.",
+  "joystickAccessibility": "Virtual movement joystick",
+  "workerArtworkAccessibility": "Farm worker",
+  "mowerArtworkAccessibility": "Mini mower"
+}

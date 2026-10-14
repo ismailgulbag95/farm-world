@@ -1,0 +1,6 @@
+# Copy to android/key.properties and fill with the private Play upload-key values.
+# Keep both this file and the keystore outside version control.
+storeFile=C:/secure/path/farm-world-upload-key.jks
+storePassword=REPLACE_WITH_PRIVATE_STORE_PASSWORD
+keyAlias=REPLACE_WITH_PRIVATE_KEY_ALIAS
+keyPassword=REPLACE_WITH_PRIVATE_KEY_PASSWORD

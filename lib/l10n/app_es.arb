@@ -1,0 +1,152 @@
+{
+  "@@locale": "es",
+  "gameTitle": "Farm World",
+  "startingField": "Un nuevo comienzo",
+  "farmCredits": "Créditos agrícolas",
+  "changeLanguage": "Cambiar idioma",
+  "languageEnglish": "English",
+  "languageTurkish": "Türkçe",
+  "languageSpanish": "Español",
+  "languageGerman": "Deutsch",
+  "openingScytheTitle": "Tu primer fardo",
+  "openingScytheBody": "Empuja el joystick hacia arriba para entrar en la pradera. Sigue moviéndote para segar y pasa por encima de cada fardo para recogerlo.",
+  "openingMowingProgressLabel": "Progreso del primer fardo",
+  "openingMowerGoalLabel": "Segadora: quedan {bales, plural, one{# venta de fardo} other{# ventas de fardos}}",
+  "@openingMowerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "openingWorkerGoalLabel": "Trabajador: quedan {bales, plural, one{# venta de fardo} other{# ventas de fardos}}",
+  "@openingWorkerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "baleNearbyTitle": "Hay un fardo listo",
+  "baleNearbyBody": "Pasa por encima para recogerlo y llévalo a la plataforma de madera.",
+  "baleCarryTitle": "Vende tu fardo",
+  "baleCarryBody": "Llévalo a la plataforma de entrega para ganar {amount} créditos.",
+  "mowerUpgradeTitle": "Consigue una segadora pequeña",
+  "mowerUpgradeBody": "Muévete más rápido y corta una franja más ancha del prado.",
+  "workerTitle": "Delega la segadora",
+  "workerNeedClearBody": "Entrega todos los fardos del suelo o que lleves antes de contratar a alguien.",
+  "workerNeedFundsBody": "Sigue vendiendo fardos. Necesitas {amount} créditos más para contratar.",
+  "workerReadyBody": "La persona contratada se hará cargo de la segadora y abrirá la primera parcela.",
+  "managementTitle": "Tu granja ya está automatizada",
+  "managementBody": "La parcela inicial y una semilla de cultivo gratuita están listas.",
+  "starterPlotReadyTitle": "Tu primer campo está listo",
+  "starterPlotReadyBody": "Planta la semilla de maíz gratuita. El primer cultivo aprovecha la ventana de siembra primaveral garantizada.",
+  "plantMaize": "Plantar maíz",
+  "plantWheat": "Plantar trigo",
+  "freeStarterSeed": "Semilla inicial gratuita",
+  "cropGrowingTitle": "Crece el {crop}",
+  "@cropGrowingTitle": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "cropGrowingBody": "{percent}% · quedan unos {minutes} min.",
+  "@cropGrowingBody": {
+    "placeholders": {
+      "percent": { "type": "String" },
+      "minutes": { "type": "String" }
+    }
+  },
+  "cropReadyTitle": "Hora de cosechar",
+  "cropReadyBody": "El {crop} está listo para cosechar.",
+  "@cropReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "firstTradeReadyBody": "Cosecha {crop} para completar tu primer intercambio. Recibirás el camión de grano inicial y {amount} créditos.",
+  "@firstTradeReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" },
+      "amount": { "type": "String" }
+    }
+  },
+  "harvestAndTrade": "Cosechar e intercambiar",
+  "harvestCrop": "Cosechar y vender",
+  "firstTradeReward": "Camión + {amount} créditos",
+  "@firstTradeReward": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "starterTruckReceivedTitle": "Tu primer camión de reparto",
+  "starterTruckReceivedBody": "Ya tienes el camión de grano inicial y {amount} créditos. Planta trigo o maíz otra vez por {seedCost} créditos.",
+  "@starterTruckReceivedBody": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "seedCost": { "type": "String" }
+    }
+  },
+  "cropSaleValue": "Valor del cultivo: {amount} créditos",
+  "@cropSaleValue": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "maizeCropName": "Maíz",
+  "wheatCropName": "Trigo",
+  "sunflowerCropName": "Girasol",
+  "potatoCropName": "Patata",
+  "chickpeaCropName": "Garbanzo",
+  "firstDiversityProgress": "Primera ruta de diversidad: {complete} / {required}",
+  "@firstDiversityProgress": {
+    "placeholders": {
+      "complete": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "firstDiversityHint": "Cosecha un cereal completo y una cosecha completa de girasol o patata.",
+  "firstDiversityComplete": "Primer hito de diversidad completado.",
+  "openingP2Progress": "Producción P2: {current} / {required} créditos",
+  "@openingP2Progress": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "soilConditionTitle": "Estado del suelo",
+  "soilConditionValue": "{points}/100 · rendimiento estimado {yieldPercent}%",
+  "@soilConditionValue": {
+    "placeholders": {
+      "points": { "type": "String" },
+      "yieldPercent": { "type": "String" }
+    }
+  },
+  "soilCareRule": "Cada cosecha completa reduce el suelo en 1 punto. T02 recupera {correction} por debajo de {trigger} a cambio de {cost} créditos.",
+  "@soilCareRule": {
+    "placeholders": {
+      "correction": { "type": "String" },
+      "trigger": { "type": "String" },
+      "cost": { "type": "String" }
+    }
+  },
+  "researchSoilCare": "Investigar cuidado del suelo",
+  "soilCareAutomationOn": "Cuidado automático: activo",
+  "soilCareAutomationOff": "Cuidado automático: inactivo",
+  "soilCareAutomationPaused": "El cuidado automático del suelo está pausado.",
+  "soilCareAwaitingFunds": "El cuidado del suelo espera {amount} créditos. La siembra y la cosecha continúan.",
+  "@soilCareAwaitingFunds": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "researchOilseedFamily": "Desbloquear familia oleaginosa",
+  "researchRootTuberFamily": "Desbloquear raíces y tubérculos",
+  "researchSunflowerCrop": "Desbloquear cultivo de girasol",
+  "researchPotatoCrop": "Desbloquear cultivo de patata",
+  "researchLegumeFamily": "Desbloquear familia de legumbres",
+  "researchChickpeaCrop": "Desbloquear cultivo de garbanzo",
+  "plantSunflower": "Plantar girasol",
+  "plantPotato": "Plantar patatas",
+  "plantChickpeas": "Plantar garbanzos",
+  "chickpeaArtworkAccessibility": "Etapas de crecimiento del garbanzo",
+  "sunflowerArtworkAccessibility": "Parcela madura de girasoles",
+  "potatoArtworkAccessibility": "Parcela madura de patatas",
+  "truckArtworkAccessibility": "Camión de grano inicial",
+  "cropPlotAccessibility": "Campo de cultivo inicial",
+  "buyMower": "Comprar segadora",
+  "hireWorker": "Contratar trabajador",
+  "costAmount": "{amount} créditos",
+  "gameplayAccessibility": "Juego Farm World. Usa el joystick virtual para moverte por el campo.",
+  "joystickAccessibility": "Joystick virtual de movimiento",
+  "workerArtworkAccessibility": "Trabajador agrícola",
+  "mowerArtworkAccessibility": "Segadora pequeña"
+}

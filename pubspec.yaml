@@ -1,0 +1,48 @@
+name: farm_world
+description: "A warm illustrated idle farm management game."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  flame: ^1.38.2
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+  path_provider: 2.1.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  generate: true
+  uses-material-design: true
+  assets:
+    - assets/images/opening/
+    - assets/images/ui/
+    - assets/images/management/
+    - assets/images/equipment/
+    - assets/images/logistics/
+    - assets/images/products/
+    - assets/images/management/starter-buildings-v1.png
+    - assets/visual-concepts/pilot/scythe-mowing-overhead-v1.png
+    - assets/visual-concepts/pilot/crop-cereal-early-v1.png
+    - assets/visual-concepts/pilot/crop-cereal-mid-v1.png
+    - assets/visual-concepts/pilot/crop-maize-mature-v1.png
+    - assets/visual-concepts/pilot/crop-wheat-mature-v1.png
+    - assets/visual-concepts/pilot/crop-sunflower-mature-v1.png
+    - assets/visual-concepts/pilot/crop-potato-mature-v1.png
+    - assets/visual-concepts/pilot/crop-sunflower-early-v1.png
+    - assets/visual-concepts/pilot/crop-sunflower-mid-v1.png
+    - assets/visual-concepts/pilot/crop-potato-early-v1.png
+    - assets/visual-concepts/pilot/crop-potato-mid-v1.png
+    - assets/visual-concepts/pilot/crop-chickpea-stages-v1.png
+    - assets/visual-concepts/pilot/vehicle-mini-mower-v1.png
+    - assets/visual-concepts/pilot/vehicle-starter-grain-truck-v1.png
+    - assets/visual-concepts/pilot/worker-employee-turnaround-v1.png

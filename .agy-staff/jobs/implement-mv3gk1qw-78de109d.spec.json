@@ -1,0 +1,22 @@
+{
+  "resolved": {
+    "mode": "implement",
+    "model": "gemini-3.8-flash-high",
+    "profile": "unrestricted",
+    "profileSource": "inherited",
+    "background": true,
+    "timeout": "60m",
+    "conversation": "c60e6dc2-8a43-4185-8470-8b6b46a54e0d",
+    "parentJobId": "implement-mv3fyg5w-7f0f56a3",
+    "originalCwd": "D:\\github\\farm world"
+  },
+  "prompt": "Follow-up in the same conversation:\n\nAdd a small pure convenience factory to the calendar domain model so app code can resolve the calendar directly from the persisted first-successful-planting UTC anchor and a supplied current DateTime, rather than calculating Duration by hand. Normalize both DateTime values to UTC, compute their difference, and delegate to the existing FarmCalendar.resolve so negative time continues to throw ArgumentError. A sensible named factory is FarmCalendar.fromPlantingAnchor({required DateTime firstSuccessfulPlantingAt, required DateTime now, Hemisphere hemisphere = Hemisphere.northern}). Document that it does not read the system clock and expects the caller to provide timestamps. Add focused tests for a season boundary from the anchor, southern phase behavior, and current time before the anchor. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Run focused calendar tests and flutter analyze. Preserve all unrelated edits, do not commit or publish.",
+  "prompt_source": {
+    "kind": "followup",
+    "task": "Add a small pure convenience factory to the calendar domain model so app code can resolve the calendar directly from the persisted first-successful-planting UTC anchor and a supplied current DateTime, rather than calculating Duration by hand. Normalize both DateTime values to UTC, compute their difference, and delegate to the existing FarmCalendar.resolve so negative time continues to throw ArgumentError. A sensible named factory is FarmCalendar.fromPlantingAnchor({required DateTime firstSuccessfulPlantingAt, required DateTime now, Hemisphere hemisphere = Hemisphere.northern}). Document that it does not read the system clock and expects the caller to provide timestamps. Add focused tests for a season boundary from the anchor, southern phase behavior, and current time before the anchor. Own only lib/game/domain/farm_calendar.dart and test/game/domain/farm_calendar_test.dart. Run focused calendar tests and flutter analyze. Preserve all unrelated edits, do not commit or publish."
+  },
+  "opts": {
+    "json": false
+  },
+  "cwd": "D:\\github\\farm world"
+}

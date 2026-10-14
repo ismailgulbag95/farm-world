@@ -1,0 +1,22 @@
+{
+  "resolved": {
+    "mode": "implement",
+    "model": "gemini-3.8-flash-high",
+    "profile": "unrestricted",
+    "profileSource": "inherited",
+    "background": true,
+    "timeout": "60m",
+    "conversation": "c60e6dc2-8a43-4185-8470-8b6b46a54e0d",
+    "parentJobId": "implement-mv3fyg5w-7f0f56a3",
+    "originalCwd": "D:\\github\\farm world"
+  },
+  "prompt": "Follow-up in the same conversation:\n\nExtend the existing opening-session domain model with the first-successful-planting calendar anchor, using docs/game-design-brief.md:87 and the existing FarmCalendar elapsed-time contract. This is a concrete settled rule: the personal 18-hour seasonal cycle begins after the first successful planting and continues offline. Add an optional UTC timestamp to OpeningSessionState and its JSON serialization, preserving backward compatibility when older JSON lacks the field. Add a write-once OpeningSession action named recordFirstSuccessfulPlanting(DateTime plantedAt) that may succeed only after management takeover, with the owned initial plot and the one free initial seed available; on success it consumes that free seed and stores plantedAt normalized to UTC. Repeated calls must not reset the anchor or consume anything. The caller invokes this only after crop planting has already succeeded; do not implement crop-specific planting windows, crop selection, UI, or locale strings. Preserve the existing conservative H02 transfer rule and all unrelated changes. Own only lib/game/domain/opening_session.dart and test/game/domain/opening_session_test.dart. Add focused tests for preconditions, one-time anchor, UTC normalization, free-seed consumption, and JSON roundtrip/backward compatibility. Run flutter test and flutter analyze, and report results. Do not commit or publish.",
+  "prompt_source": {
+    "kind": "followup",
+    "task": "Extend the existing opening-session domain model with the first-successful-planting calendar anchor, using docs/game-design-brief.md:87 and the existing FarmCalendar elapsed-time contract. This is a concrete settled rule: the personal 18-hour seasonal cycle begins after the first successful planting and continues offline. Add an optional UTC timestamp to OpeningSessionState and its JSON serialization, preserving backward compatibility when older JSON lacks the field. Add a write-once OpeningSession action named recordFirstSuccessfulPlanting(DateTime plantedAt) that may succeed only after management takeover, with the owned initial plot and the one free initial seed available; on success it consumes that free seed and stores plantedAt normalized to UTC. Repeated calls must not reset the anchor or consume anything. The caller invokes this only after crop planting has already succeeded; do not implement crop-specific planting windows, crop selection, UI, or locale strings. Preserve the existing conservative H02 transfer rule and all unrelated changes. Own only lib/game/domain/opening_session.dart and test/game/domain/opening_session_test.dart. Add focused tests for preconditions, one-time anchor, UTC normalization, free-seed consumption, and JSON roundtrip/backward compatibility. Run flutter test and flutter analyze, and report results. Do not commit or publish."
+  },
+  "opts": {
+    "json": false
+  },
+  "cwd": "D:\\github\\farm world"
+}

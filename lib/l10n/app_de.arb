@@ -1,0 +1,152 @@
+{
+  "@@locale": "de",
+  "gameTitle": "Farm World",
+  "startingField": "Ein neuer Anfang",
+  "farmCredits": "Hofguthaben",
+  "changeLanguage": "Sprache ändern",
+  "languageEnglish": "English",
+  "languageTurkish": "Türkçe",
+  "languageSpanish": "Español",
+  "languageGerman": "Deutsch",
+  "openingScytheTitle": "Dein erster Ballen",
+  "openingScytheBody": "Schiebe den Steuerknüppel nach oben auf die Wiese. Bleib in Bewegung und laufe über jeden Ballen, um ihn aufzuheben.",
+  "openingMowingProgressLabel": "Fortschritt zum ersten Ballen",
+  "openingMowerGoalLabel": "Mäher: noch {bales, plural, one{# Ballenverkauf} other{# Ballenverkäufe}}",
+  "@openingMowerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "openingWorkerGoalLabel": "Arbeitskraft: noch {bales, plural, one{# Ballenverkauf} other{# Ballenverkäufe}}",
+  "@openingWorkerGoalLabel": { "placeholders": { "bales": { "type": "int" } } },
+  "baleNearbyTitle": "Ein Ballen ist fertig",
+  "baleNearbyBody": "Lauf darüber, nimm ihn auf und bring ihn zur Holzplattform.",
+  "baleCarryTitle": "Verkaufe deinen Ballen",
+  "baleCarryBody": "Bring ihn zur Abladeplattform und erhalte {amount} Hofguthaben.",
+  "mowerUpgradeTitle": "Kaufe einen kleinen Mäher",
+  "mowerUpgradeBody": "Bewege dich schneller und mähe eine breitere Spur durch die Wiese.",
+  "workerTitle": "Übergib den Mäher",
+  "workerNeedClearBody": "Verkaufe alle Ballen am Boden oder in deinen Händen, bevor du jemanden einstellst.",
+  "workerNeedFundsBody": "Verkaufe weitere Ballen. Für die Einstellung fehlen noch {amount} Hofguthaben.",
+  "workerReadyBody": "Die Arbeitskraft übernimmt den Mäher und schaltet das erste Feld frei.",
+  "managementTitle": "Dein Hof läuft automatisch",
+  "managementBody": "Das Startfeld und ein kostenloser Pflanzensamen sind bereit.",
+  "starterPlotReadyTitle": "Dein erstes Feld ist bereit",
+  "starterPlotReadyBody": "Pflanze den kostenlosen Maissamen. Die erste Kultur nutzt das garantierte Frühjahrs-Aussaatfenster.",
+  "plantMaize": "Mais pflanzen",
+  "plantWheat": "Weizen pflanzen",
+  "freeStarterSeed": "Kostenloses Start-Saatgut",
+  "cropGrowingTitle": "{crop} wächst",
+  "@cropGrowingTitle": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "cropGrowingBody": "{percent}% gewachsen · noch etwa {minutes} Min.",
+  "@cropGrowingBody": {
+    "placeholders": {
+      "percent": { "type": "String" },
+      "minutes": { "type": "String" }
+    }
+  },
+  "cropReadyTitle": "Erntezeit",
+  "cropReadyBody": "{crop} ist erntereif.",
+  "@cropReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" }
+    }
+  },
+  "firstTradeReadyBody": "Ernte {crop}, um deinen ersten Tausch abzuschließen. Du erhältst den kleinen Getreidelaster und {amount} Hofguthaben.",
+  "@firstTradeReadyBody": {
+    "placeholders": {
+      "crop": { "type": "String" },
+      "amount": { "type": "String" }
+    }
+  },
+  "harvestAndTrade": "Ernten und tauschen",
+  "harvestCrop": "Ernten und verkaufen",
+  "firstTradeReward": "Laster + {amount} Guthaben",
+  "@firstTradeReward": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "starterTruckReceivedTitle": "Dein erster Lieferwagen",
+  "starterTruckReceivedBody": "Der kleine Getreidelaster und {amount} Hofguthaben gehören dir. Pflanze Weizen oder Mais erneut für {seedCost} Guthaben.",
+  "@starterTruckReceivedBody": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "seedCost": { "type": "String" }
+    }
+  },
+  "cropSaleValue": "Erntewert: {amount} Guthaben",
+  "@cropSaleValue": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "maizeCropName": "Mais",
+  "wheatCropName": "Weizen",
+  "sunflowerCropName": "Sonnenblume",
+  "potatoCropName": "Kartoffel",
+  "chickpeaCropName": "Kichererbse",
+  "firstDiversityProgress": "Erste Vielfalt: {complete} / {required} Produktionswege",
+  "@firstDiversityProgress": {
+    "placeholders": {
+      "complete": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "firstDiversityHint": "Ernte ein Getreidefeld vollständig und entweder Sonnenblumen oder Kartoffeln.",
+  "firstDiversityComplete": "Der erste Vielfalt-Meilenstein ist erreicht.",
+  "openingP2Progress": "P2-Produktion: {current} / {required} Farm-Credits",
+  "@openingP2Progress": {
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "soilConditionTitle": "Bodenzustand",
+  "soilConditionValue": "{points}/100 · geschätzter Ertrag {yieldPercent}%",
+  "@soilConditionValue": {
+    "placeholders": {
+      "points": { "type": "String" },
+      "yieldPercent": { "type": "String" }
+    }
+  },
+  "soilCareRule": "Jede volle Ernte senkt den Bodenwert um 1 Punkt. T02 stellt unter {trigger} für {cost} Credits {correction} Punkte wieder her.",
+  "@soilCareRule": {
+    "placeholders": {
+      "correction": { "type": "String" },
+      "trigger": { "type": "String" },
+      "cost": { "type": "String" }
+    }
+  },
+  "researchSoilCare": "Bodenpflege erforschen",
+  "soilCareAutomationOn": "Automatische Pflege: an",
+  "soilCareAutomationOff": "Automatische Pflege: aus",
+  "soilCareAutomationPaused": "Die automatische Bodenpflege ist pausiert.",
+  "soilCareAwaitingFunds": "Die Bodenpflege wartet auf {amount} Credits. Aussaat und Ernte laufen weiter.",
+  "@soilCareAwaitingFunds": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "researchOilseedFamily": "Ölsaatenfamilie freischalten",
+  "researchRootTuberFamily": "Wurzel- und Knollenfamilie freischalten",
+  "researchSunflowerCrop": "Sonnenblumen freischalten",
+  "researchPotatoCrop": "Kartoffeln freischalten",
+  "researchLegumeFamily": "Hülsenfruchtfamilie freischalten",
+  "researchChickpeaCrop": "Kichererbsenanbau freischalten",
+  "plantSunflower": "Sonnenblumen säen",
+  "plantPotato": "Kartoffeln pflanzen",
+  "plantChickpeas": "Kichererbsen säen",
+  "chickpeaArtworkAccessibility": "Wachstumsphasen der Kichererbse",
+  "sunflowerArtworkAccessibility": "Reifes Sonnenblumenfeld",
+  "potatoArtworkAccessibility": "Reifes Kartoffelfeld",
+  "truckArtworkAccessibility": "Kleiner Getreidelaster",
+  "cropPlotAccessibility": "Erstes Anbaufeld",
+  "buyMower": "Kleinmäher kaufen",
+  "hireWorker": "Arbeitskraft einstellen",
+  "costAmount": "{amount} Hofguthaben",
+  "gameplayAccessibility": "Farm-World-Spiel. Bewege die Figur mit dem virtuellen Steuerknüppel über das Feld.",
+  "joystickAccessibility": "Virtueller Bewegungssteuerknüppel",
+  "workerArtworkAccessibility": "Landwirtschaftliche Arbeitskraft",
+  "mowerArtworkAccessibility": "Kleinmäher"
+}
