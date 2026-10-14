@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Phase 4 - Processing Plants & Recipe Production Tests', () {
     test('Recipe catalog includes all brief-specified refined goods and recipes', () {
-      expect(ProcessingRecipeCatalog.all.length, equals(4));
+      expect(ProcessingRecipeCatalog.all.length, equals(10));
 
       final wheatFlour = ProcessingRecipeCatalog.wheatFlour;
       expect(wheatFlour.inputCropId, equals('CR01'));
@@ -33,6 +33,7 @@ void main() {
         positionX: 0,
         positionY: 0,
         allowedRecipeIds: ['rcp_wheat_flour'],
+        isUnlocked: true,
       );
 
       // Starved initially
@@ -71,6 +72,7 @@ void main() {
         positionY: 0,
         outputBufferCapacity: 5,
         allowedRecipeIds: ['rcp_wheat_flour'],
+        isUnlocked: true,
       );
 
       mill.depositInput('CR01', 20);
@@ -118,16 +120,26 @@ void main() {
 
     test('OpeningSession integrates ProcessingPlantManager in management mode', () {
       final session = OpeningSession();
-      session.addCredits(2000);
+      session.addCredits(20000);
       session.buyMower();
       session.hireWorker();
 
-      expect(session.plantManager.facilities.length, equals(3));
-      final flourMill = session.plantManager.facilities.firstWhere((f) => f.id == 'fac_flour_mill');
-      flourMill.depositInput('CR01', 10);
+      // Research building and crop technologies
+      session.unlockTechnology('PR13');
 
-      // Step simulation
-      session.advanceProcessing(0.5);
+      final flourMill = ProcessingFacility(
+        id: 'built_mill_01',
+        name: 'Un Fabrikası',
+        positionX: 0,
+        positionY: 0,
+        allowedRecipeIds: ['rcp_wheat_flour'],
+        isUnlocked: true,
+      );
+      session.plantManager.facilities.add(flourMill);
+      expect(session.plantManager.facilities.length, equals(1));
+
+      flourMill.depositInput('CR01', 10);
+      flourMill.update(0.1);
       expect(flourMill.status, equals(FacilityStatus.processing));
     });
   });

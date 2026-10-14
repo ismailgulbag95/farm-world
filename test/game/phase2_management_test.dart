@@ -12,12 +12,12 @@ void main() {
       final session = OpeningSession();
       final plots = session.plots;
 
-      expect(plots.length, equals(4));
+      expect(plots.length, equals(8));
       // Starter plot
       expect(plots[0].id, equals(0));
       expect(plots[0].isOwned, isFalse);
 
-      // North plot
+      // North plot (starter plot when hired)
       expect(plots[1].id, equals(1));
       expect(plots[1].isOwned, isFalse);
       expect(plots[1].purchaseCostCredits, equals(1000));
@@ -37,7 +37,7 @@ void main() {
       final session = OpeningSession();
 
       // Cannot buy plot before management stage
-      expect(session.canBuyPlot(1), isFalse);
+      expect(session.canBuyPlot(2), isFalse);
 
       session.addCredits(500);
 
@@ -45,20 +45,22 @@ void main() {
       expect(session.buyMower(), isTrue);
       expect(session.hireWorker(), isTrue);
       expect(session.stage, equals(OpeningStage.management));
+      // Starter plot 1 is owned upon hire
+      expect(session.plots.firstWhere((p) => p.id == 1).isOwned, isTrue);
 
-      // Cannot afford 1000 credits initially
-      expect(session.canBuyPlot(1), isFalse);
+      // Cannot afford 1120 credits for plot 2 initially
+      expect(session.canBuyPlot(2), isFalse);
 
       // Add credits for plot
       session.addCredits(1500);
-      expect(session.farmCredits, greaterThanOrEqualTo(1000));
+      expect(session.farmCredits, greaterThanOrEqualTo(1120));
 
-      expect(session.canBuyPlot(1), isTrue);
-      expect(session.buyPlot(1), isTrue);
-      expect(session.plots.firstWhere((p) => p.id == 1).isOwned, isTrue);
+      expect(session.canBuyPlot(2), isTrue);
+      expect(session.buyPlot(2), isTrue);
+      expect(session.plots.firstWhere((p) => p.id == 2).isOwned, isTrue);
 
       // Cannot re-purchase already owned plot
-      expect(session.canBuyPlot(1), isFalse);
+      expect(session.canBuyPlot(2), isFalse);
     });
 
     test('Planting and harvesting on expansion plots cycles independently', () {
@@ -67,28 +69,39 @@ void main() {
 
       expect(session.buyMower(), isTrue);
       expect(session.hireWorker(), isTrue);
-      expect(session.buyPlot(1), isTrue);
+      expect(session.buyPlot(2), isTrue);
 
       final now = DateTime.utc(2026, 10, 11, 12, 0);
       session.recordFirstSuccessfulPlanting(now);
 
-      expect(session.canPlantCropOnPlot(1, OpeningSession.starterWheatId), isTrue);
-      expect(session.plantCropOnPlot(1, OpeningSession.starterWheatId, now), isTrue);
+      // Expansion plot 2 must be cultivated before sowing
+      expect(session.canCultivatePlot(2), isTrue);
+      expect(session.cultivatePlot(2, now), isTrue);
+      final cultivateDone = now.add(const Duration(minutes: 10));
+      session.advanceFarmOperations(cultivateDone);
 
-      final plot1 = session.plots.firstWhere((p) => p.id == 1);
-      expect(plot1.hasActiveCrop, isTrue);
-      expect(plot1.activeCropId, equals(OpeningSession.starterWheatId));
+      final plantTime = cultivateDone;
+      expect(session.canPlantCropOnPlot(2, OpeningSession.starterWheatId), isTrue);
+      expect(session.plantCropOnPlot(2, OpeningSession.starterWheatId, plantTime), isTrue);
+      final sowDone = plantTime.add(const Duration(minutes: 10));
+      session.advanceFarmOperations(sowDone);
+
+      final plot2 = session.plots.firstWhere((p) => p.id == 2);
+      expect(plot2.hasActiveCrop, isTrue);
+      expect(plot2.activeCropId, equals(OpeningSession.starterWheatId));
 
       // Cannot harvest immediately
-      expect(session.harvestCropOnPlot(1, now), isFalse);
+      expect(session.canHarvestCropOnPlot(2, sowDone), isFalse);
 
-      // Harvest after 6 minutes
-      final harvestTime = now.add(const Duration(minutes: 6));
-      expect(session.harvestCropOnPlot(1, harvestTime), isTrue);
+      // Harvest after crop growth completes (starter crop is 6 min)
+      final harvestTime = sowDone.add(const Duration(minutes: 7));
+      expect(session.canHarvestCropOnPlot(2, harvestTime), isTrue);
+      expect(session.harvestCropOnPlot(2, harvestTime), isTrue);
+      session.advanceFarmOperations(harvestTime.add(const Duration(minutes: 10)));
 
-      final harvestedPlot1 = session.plots.firstWhere((p) => p.id == 1);
-      expect(harvestedPlot1.hasHarvestedActiveCrop, isTrue);
-      expect(harvestedPlot1.soilConditionPoints, equals(79));
+      final harvestedPlot2 = session.plots.firstWhere((p) => p.id == 2);
+      expect(harvestedPlot2.hasHarvestedActiveCrop, isTrue);
+      expect(harvestedPlot2.soilConditionPoints, equals(81));
     });
 
     test('Autonomous worker state machine steps through tasks', () {

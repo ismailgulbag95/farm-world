@@ -728,11 +728,40 @@ class LogisticsFleetManager {
       (vehicle) => vehicle.truckType == TruckType.starter,
     );
     if (!hasStarterTruck) {
+      const starterRouteId = 'route_starter';
+      if (!routes.any((r) => r.id == starterRouteId)) {
+        routes.add(
+          const TransportRoute(
+            id: starterRouteId,
+            name: 'Tarladan Pazara Satış Hattı',
+            stops: [
+              RouteStop(
+                id: 'stop_starter_plot',
+                name: 'Başlangıç Tarlası',
+                positionX: 0,
+                positionY: 0,
+                stopType: StopType.fieldPlot,
+                action: CargoAction.load,
+              ),
+              RouteStop(
+                id: 'stop_market',
+                name: 'Kasaba Pazarı',
+                positionX: starterMarketMapX,
+                positionY: starterMarketMapY,
+                stopType: StopType.market,
+                action: CargoAction.unload,
+              ),
+            ],
+            isOneShot: false,
+          ),
+        );
+      }
       vehicles.add(
         const FleetVehicleState(
           id: 'truck_starter_01',
           truckType: TruckType.starter,
           status: VehicleStatus.idle,
+          assignedRouteId: starterRouteId,
         ),
       );
     }

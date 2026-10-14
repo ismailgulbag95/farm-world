@@ -1935,6 +1935,7 @@ class _ResearchConnectionsPainter extends CustomPainter {
               ),
               properties: SemanticsProperties(
                 label: '${node.name}, ${node.track}, ${node.mainBranch.title}',
+                textDirection: TextDirection.ltr,
                 button: true,
                 onTap: () => onNodeTap(node.id),
               ),

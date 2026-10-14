@@ -85,8 +85,11 @@ class AutonomousWorkerComponent extends PositionComponent {
             return;
           }
         }
-      } else if (session.canPlantCropOnPlot(plot.id, OpeningSession.starterWheatId)) {
-        // Needs planting
+      } else if (session.canPlantCropOnPlot(plot.id, OpeningSession.starterWheatId) ||
+          session.canCultivatePlot(plot.id) ||
+          plot.activeJob != null ||
+          !plot.isCultivated) {
+        // Needs field work / planting / cultivation
         currentTargetPlotId = plot.id;
         targetPosition = plotPos;
         state = WorkerState.movingToPlot;

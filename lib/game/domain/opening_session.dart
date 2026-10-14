@@ -21,6 +21,7 @@ import 'procedural_farm_world.dart';
 import 'farm_building.dart';
 import 'market_price_simulator.dart';
 import 'delivery_contracts.dart';
+import 'audio_controller.dart';
 
 /// Lifecycle stages of the opening gameplay hook.
 enum OpeningStage {
@@ -804,6 +805,8 @@ class OpeningSession {
       for (final id in _activeFarmJobsByPlotId.keys) ?_plotsByIdCache[id],
     ];
   }
+
+  FarmTutorialStep get tutorialStep => _state.farmTutorialStep;
 
   bool get isFarmTutorialComplete =>
       _state.farmTutorialStep == FarmTutorialStep.complete;
@@ -1686,6 +1689,7 @@ class OpeningSession {
           ? true
           : _state.automaticSoilCareEnabled,
     );
+    AudioController.instance.playEffect(SoundEffect.techUnlock);
     return true;
   }
 
@@ -1721,7 +1725,7 @@ class OpeningSession {
     return true;
   }
 
-  void _tryAutomaticSoilCare() {
+  void _tryAutomaticSoilCare({DateTime? now}) {
     if (!hasPurchasedTechnology(soilCareTechnologyId) ||
         !_state.automaticSoilCareEnabled ||
         !canUseEquippedEquipmentFor(FarmOperation.fertilize)) {
@@ -1731,7 +1735,7 @@ class OpeningSession {
     var credits = _state.farmCredits;
     final currentPlots = List<CropPlotState>.from(plots);
     var plotsChanged = false;
-    final now = DateTime.now().toUtc();
+    final nowUtc = (now ?? DateTime.now()).toUtc();
     for (var index = 0; index < currentPlots.length; index++) {
       final plot = currentPlots[index];
       if (!plot.isOwned ||
@@ -1755,7 +1759,7 @@ class OpeningSession {
       final job = _newJob(
         plot: plot,
         operation: FarmOperation.fertilize,
-        now: now,
+        now: nowUtc,
         soilAfter: soilAfter,
       );
       currentPlots[index] = plot.copyWith(activeJob: job);
@@ -1790,6 +1794,7 @@ class OpeningSession {
       hasOwnedInitialPlot: true,
       freeInitialSeedsCount: 1,
     );
+    grantStarterEquipmentOnce();
     return true;
   }
 
@@ -1814,12 +1819,14 @@ class OpeningSession {
       hasWorker: true,
       isMowerAssignedToWorker: true,
       hasOwnedInitialPlot: true,
+      hasStarterTruck: true,
       freeInitialSeedsCount: updatedSeeds,
       farmCredits: updatedCredits,
       isCarryingBale: false,
       carriedBalesCount: 0,
       groundBaleCount: 0,
     );
+    grantStarterEquipmentOnce();
   }
 
   /// Records the write-once first successful crop planting calendar anchor.
@@ -1924,6 +1931,18 @@ class OpeningSession {
       (harvestValue / max(1, (crop?.fullHarvestValueCredits ?? 300) ~/ 10))
           .round(),
     );
+    final newSoil = isFullCropHarvest && _state.soilConditionPoints > 0
+        ? _state.soilConditionPoints - 1
+        : _state.soilConditionPoints;
+    final updatedPlots = plots.map((p) {
+      if (p.id == starterPlotId) {
+        return p.copyWith(
+          soilConditionPoints: newSoil,
+          hasHarvestedActiveCrop: true,
+        );
+      }
+      return p;
+    }).toList(growable: false);
     _state = _state.copyWith(
       lifetimeProductionEvidence:
           _state.lifetimeProductionEvidence + harvestValue,
@@ -1933,13 +1952,13 @@ class OpeningSession {
       farmTutorialStep: _state.farmTutorialStep == FarmTutorialStep.harvest
           ? FarmTutorialStep.warehouse
           : _state.farmTutorialStep,
-      soilConditionPoints: isFullCropHarvest && _state.soilConditionPoints > 0
-          ? _state.soilConditionPoints - 1
-          : _state.soilConditionPoints,
+      soilConditionPoints: newSoil,
+      plots: updatedPlots,
     );
     if (unlocksStarterTruck) fleetManager.initializeStarterFleet();
     fleetManager.depositToWarehouse(cropId, outputQuantity);
-    _tryAutomaticSoilCare();
+    _tryAutomaticSoilCare(now: now);
+    AudioController.instance.playEffect(SoundEffect.harvest);
     return true;
   }
 
@@ -2281,6 +2300,7 @@ class OpeningSession {
       ownedWorldParcelIds: {..._state.ownedWorldParcelIds, parcel.id},
       plots: currentPlots,
     );
+    AudioController.instance.playEffect(SoundEffect.purchaseParcel);
     return true;
   }
 
@@ -2717,7 +2737,7 @@ class OpeningSession {
         scaledFieldCost(plot, fieldPreparationCostPerThousandSquareMeters);
   }
 
-  bool cultivatePlot(int plotId) {
+  bool cultivatePlot(int plotId, [DateTime? now]) {
     if (!canCultivatePlot(plotId)) return false;
     final currentPlots = List<CropPlotState>.from(plots);
     final index = currentPlots.indexWhere((plot) => plot.id == plotId);
@@ -2729,7 +2749,7 @@ class OpeningSession {
     final job = _newJob(
       plot: plot,
       operation: FarmOperation.prepare,
-      now: DateTime.now(),
+      now: (now ?? DateTime.now()).toUtc(),
     );
     _beginPlotJob(plot, job, cost);
     return true;
@@ -2754,7 +2774,7 @@ class OpeningSession {
         scaledFieldCost(plot, fieldFertilizerCostPerThousandSquareMeters);
   }
 
-  bool fertilizePlot(int plotId) {
+  bool fertilizePlot(int plotId, [DateTime? now]) {
     if (!canFertilizePlot(plotId)) return false;
     final plot = plotById(plotId)!;
     final cost = scaledFieldCost(
@@ -2768,7 +2788,7 @@ class OpeningSession {
     final job = _newJob(
       plot: plot,
       operation: FarmOperation.fertilize,
-      now: DateTime.now(),
+      now: (now ?? DateTime.now()).toUtc(),
       soilAfter: soilAfter,
     );
     _beginPlotJob(plot, job, cost);
@@ -2930,6 +2950,7 @@ class OpeningSession {
       isFullHarvest: isFullHarvest,
     );
     _beginPlotJob(plot, job, harvestCost);
+    AudioController.instance.playEffect(SoundEffect.harvest);
     return true;
   }
 
@@ -3237,7 +3258,8 @@ class OpeningSession {
         (targetCropId != null && warehouseAmountFor(targetCropId) <= 0) ||
         (productId != null && warehouseAmountFor(productId) <= 0) ||
         starterVehicle.isEmpty ||
-        starterVehicle.first.assignedRouteId != null ||
+        (starterVehicle.first.assignedRouteId != null &&
+            starterVehicle.first.assignedRouteId != 'route_starter') ||
         starterVehicle.first.fuelLevel <= 0.01 ||
         starterVehicle.first.wearPercent >= 100) {
       return false;
@@ -3254,6 +3276,7 @@ class OpeningSession {
     if (_state.farmTutorialStep == FarmTutorialStep.deliveryRoute) {
       _state = _state.copyWith(farmTutorialStep: FarmTutorialStep.delivery);
     }
+    AudioController.instance.playEffect(SoundEffect.truckDepart);
     return true;
   }
 

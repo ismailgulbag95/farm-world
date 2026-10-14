@@ -21,7 +21,9 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
     images = Images(prefix: 'assets/');
   }
 
-  late final JoystickComponent joystick;
+  JoystickComponent? _joystick;
+  JoystickComponent get joystick => _joystick!;
+  bool get hasJoystick => _joystick != null;
   late final PositionComponent balanceIndicator = PositionComponent(
     size: Vector2(96, 38),
     anchor: Anchor.topRight,
@@ -36,13 +38,20 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
   double _gestureStartZoom = 0.5;
   Vector2 _lastGameSize = Vector2.zero();
 
+  bool _isTransitioningToManagement = false;
+  double _transitionProgress = 0.0;
+  static const double _transitionDuration = 1.6;
+  Vector2 _transitionStartPosition = Vector2.zero();
+  double _transitionStartZoom = 1.0;
+  VoidCallback? onManagementTransitionComplete;
+
   @override
   Future<void> onLoad() async {
     final artwork = await FarmWorldArtwork.load(images);
     world.setArtwork(artwork);
     await super.onLoad();
 
-    joystick = JoystickComponent(
+    _joystick = JoystickComponent(
       knob: CircleComponent(
         radius: 23,
         paint: Paint()..color = const Color(0xD9685132),
@@ -54,7 +63,7 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
       anchor: Anchor.center,
     );
 
-    world.joystick = joystick;
+    world.joystick = _joystick!;
     if (world.session.stage == OpeningStage.management) {
       world.startManagementView();
       camera.stop();
@@ -111,9 +120,24 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
       _mowingHudTimer = 0;
     }
 
+    if (_isTransitioningToManagement) {
+      _transitionProgress += dt / _transitionDuration;
+      final t = Curves.easeInOutCubic.transform(_transitionProgress.clamp(0.0, 1.0));
+      camera.viewfinder.position = _transitionStartPosition * (1.0 - t);
+      camera.viewfinder.zoom = _transitionStartZoom + (_managementFitZoom - _transitionStartZoom) * t;
+      if (_transitionProgress >= 1.0) {
+        _isTransitioningToManagement = false;
+        world.startManagementView();
+        camera.stop();
+        camera.viewfinder.position = Vector2.zero();
+        camera.viewfinder.zoom = _managementFitZoom;
+        onManagementTransitionComplete?.call();
+      }
+    }
+
     if (world.session.stage != _observedStage) {
       _observedStage = world.session.stage;
-      if (world.session.stage == OpeningStage.management) {
+      if (world.session.stage == OpeningStage.management && !_isTransitioningToManagement) {
         world.startManagementView();
         joystick.removeFromParent();
         camera.stop();
@@ -132,14 +156,17 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
   bool hireWorker() {
     final hired = world.session.hireWorker();
     if (hired) {
-      world.startManagementView();
-      joystick.removeFromParent();
+      if (hasJoystick && joystick.isMounted) {
+        joystick.removeFromParent();
+      }
       camera.stop();
-      camera.viewfinder.position = Vector2.zero();
+      _transitionStartPosition = camera.viewfinder.position.clone();
+      _transitionStartZoom = camera.viewfinder.zoom;
+      _transitionProgress = 0.0;
+      _isTransitioningToManagement = true;
       _observedState = world.session.state;
       _observedStage = world.session.stage;
       sessionRevision.value++;
-      if (hasLayout) _updateLayout(canvasSize);
     }
     return hired;
   }
@@ -147,7 +174,7 @@ class FarmWorldGame extends FlameGame<OpeningMowingWorld> with ScaleDetector {
   void skipToManagement() {
     world.session.skipToManagement();
     world.startManagementView();
-    if (joystick.isMounted) {
+    if (hasJoystick && joystick.isMounted) {
       joystick.removeFromParent();
     }
     camera.stop();

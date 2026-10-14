@@ -193,6 +193,8 @@ void main() {
       session.addCredits(5000);
       session.buyMower();
       session.hireWorker();
+      session.unlockTechnology('L06');
+      session.unlockTechnology('L07');
 
       expect(session.canBuyTruck(TruckType.lightExpress), isTrue);
       expect(session.buyTruck(TruckType.lightExpress), isTrue);

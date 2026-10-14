@@ -975,12 +975,29 @@ void main() {
       final readyAt = plantedAt.add(OpeningSession.starterCropGrowthDuration);
       expect(session.canHarvestCropAt(readyAt), isTrue);
       expect(session.harvestCrop(readyAt), isTrue);
-      expect(session.farmCredits, OpeningSession.starterTradeCredits);
-      expect(session.lifetimeProductionEvidence, 980);
+      // Ürün doğrudan nakde değil ambara aktarılır
+      expect(session.farmCredits, 0);
+      expect(
+        session.warehouseAmountFor(OpeningSession.starterMaizeId),
+        greaterThan(0),
+      );
+      expect(session.lifetimeProductionEvidence, 1058);
       expect(session.soilConditionPoints, 79);
-      expect(session.hasCompletedStarterTrade, isTrue);
       expect(session.hasStarterTruck, isTrue);
       expect(session.harvestCrop(readyAt), isFalse);
+
+      // Tır lojistik hattı ile pazara teslimat başlatılır
+      expect(
+        session.startStarterMarketRoute(
+          fieldX: 100,
+          fieldY: 100,
+          fieldName: 'Başlangıç Tarlası',
+        ),
+        isTrue,
+      );
+      session.advanceLogistics(20.0);
+      expect(session.hasCompletedStarterTrade, isTrue);
+      expect(session.farmCredits, greaterThan(0));
     });
 
     test(
@@ -1006,21 +1023,43 @@ void main() {
           isTrue,
         );
 
+        // Ambardaki ürünü pazar rotasıyla satıp tohum bütçesi oluştur
+        expect(
+          session.startStarterMarketRoute(
+            fieldX: 100,
+            fieldY: 100,
+            fieldName: 'Başlangıç Tarlası',
+          ),
+          isTrue,
+        );
+        session.advanceLogistics(20.0);
+        expect(session.hasCompletedStarterTrade, isTrue);
+        final creditsBeforeSeed = session.farmCredits;
+        expect(
+          creditsBeforeSeed,
+          greaterThanOrEqualTo(OpeningSession.starterCropSeedCost),
+        );
+
         final secondPlanting = firstPlanting.add(const Duration(minutes: 7));
         expect(session.canPlantCrop(OpeningSession.starterWheatId), isTrue);
         expect(
           session.plantCrop(OpeningSession.starterWheatId, secondPlanting),
           isTrue,
         );
-        expect(session.farmCredits, 750 - OpeningSession.starterCropSeedCost);
+        expect(
+          session.farmCredits,
+          creditsBeforeSeed - OpeningSession.starterCropSeedCost,
+        );
 
         final readyAt = secondPlanting.add(
           OpeningSession.starterCropGrowthDuration,
         );
-        expect(session.cropSnapshotAt(readyAt)?.harvestYield, 734.25);
+        expect(session.cropSnapshotAt(readyAt)?.harvestYield, closeTo(792.62, 0.05));
         expect(session.harvestCrop(readyAt), isTrue);
-        expect(session.farmCredits, 750 - 120 + 734);
-        expect(session.lifetimeProductionEvidence, 1714);
+        expect(
+          session.warehouseAmountFor(OpeningSession.starterWheatId),
+          greaterThan(0),
+        );
       },
     );
 

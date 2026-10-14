@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:farm_world/game/domain/crop_plot.dart';
 import 'package:farm_world/game/domain/opening_session.dart';
 
 void main() {
@@ -18,10 +19,13 @@ void main() {
       expect(session.plantCrop('CR02', plantedAt), isTrue);
 
       final readyAt = plantedAt.add(const Duration(minutes: 6));
-      expect(session.cropSnapshotAt(readyAt)!.harvestYield, 980);
+      expect(
+        session.cropSnapshotAt(readyAt)!.harvestYield,
+        closeTo(1058.4, 0.01),
+      );
       expect(session.harvestCrop(readyAt), isTrue);
       expect(session.soilConditionPoints, 79);
-      expect(session.lifetimeProductionEvidence, 980);
+      expect(session.lifetimeProductionEvidence, 1058);
     });
 
     test('T02 requires P2, C2, and the owned starter field', () {
@@ -87,14 +91,17 @@ void main() {
           session
               .cropSnapshotAt(plantedAt.add(const Duration(minutes: 6)))!
               .harvestYield,
-          975,
+          closeTo(1050.56, 0.01),
         );
+        final harvestAt = plantedAt.add(const Duration(minutes: 6));
         expect(
-          session.harvestCrop(plantedAt.add(const Duration(minutes: 6))),
+          session.harvestCrop(harvestAt),
           isTrue,
         );
+        // Otomatik gübreleme işini tamamla
+        session.advanceFarmOperations(harvestAt.add(const Duration(minutes: 5)));
         expect(session.soilConditionPoints, 77);
-        expect(session.farmCredits, 955);
+        expect(session.farmCredits, 80);
         expect(session.debt, 0);
       },
     );
@@ -135,11 +142,11 @@ OpeningSession _ripeMaizeSession({
   required int soilPoints,
   required bool automaticSoilCareEnabled,
 }) {
-  return OpeningSession(
+  final session = OpeningSession(
     initialState: OpeningSessionState(
       stage: OpeningStage.management,
       hasOwnedInitialPlot: true,
-      farmCredits: 0,
+      farmCredits: 100,
       lifetimeProductionEvidence: 1000,
       firstSuccessfulPlantingAt: plantedAt,
       activeCropId: 'CR02',
@@ -148,6 +155,18 @@ OpeningSession _ripeMaizeSession({
       soilConditionPoints: soilPoints,
       automaticSoilCareEnabled: automaticSoilCareEnabled,
       purchasedTechnologyIds: {OpeningSession.soilCareTechnologyId},
+      plots: [
+        CropPlotState(
+          id: 0,
+          name: 'Başlangıç Tarlası',
+          isOwned: true,
+          soilConditionPoints: soilPoints,
+          activeCropId: 'CR02',
+          activeCropPlantedAt: plantedAt,
+        ),
+      ],
     ),
   );
+  session.grantStarterEquipmentOnce();
+  return session;
 }

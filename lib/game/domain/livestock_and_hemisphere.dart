@@ -39,9 +39,9 @@ class ChickenCoop {
     this.maxFeedCapacity = 200.0,
     this.eggStock = 0,
     this.maxEggCapacity = 100,
-    this.isUnlocked = false,
-    double eggProductionProgress = 0.0,
-  }) : _eggProductionProgress = eggProductionProgress;
+    bool? isUnlocked,
+    this.eggProductionProgress = 0.0,
+  }) : isUnlocked = isUnlocked ?? (chickenCount > 0);
 
   int chickenCount;
   int maxCapacity;
@@ -51,7 +51,7 @@ class ChickenCoop {
   int maxEggCapacity;
   bool isUnlocked;
 
-  double _eggProductionProgress;
+  double eggProductionProgress;
 
   bool get isFeedStarved => feedStock <= 0.01;
   double get remainingFeedCapacity => max(0.0, maxFeedCapacity - feedStock);
@@ -106,11 +106,11 @@ class ChickenCoop {
       // Produce eggs
       final eggsProducedFraction =
           chickenCount * AnimalType.chicken.productionPerMinute * minutes;
-      _eggProductionProgress += eggsProducedFraction;
+      eggProductionProgress += eggsProducedFraction;
 
-      final wholeEggs = _eggProductionProgress.floor();
+      final wholeEggs = eggProductionProgress.floor();
       if (wholeEggs > 0) {
-        _eggProductionProgress -= wholeEggs;
+        eggProductionProgress -= wholeEggs;
         eggStock = min(maxEggCapacity, eggStock + wholeEggs);
       }
     } else {
@@ -127,7 +127,7 @@ class ChickenCoop {
     'eggStock': eggStock,
     'maxEggCapacity': maxEggCapacity,
     'isUnlocked': isUnlocked,
-    'eggProductionProgress': _eggProductionProgress,
+    'eggProductionProgress': eggProductionProgress,
   };
 
   factory ChickenCoop.fromJson(Map<String, dynamic> json) => ChickenCoop(

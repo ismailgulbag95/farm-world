@@ -19,6 +19,7 @@ import 'components/truck_component.dart';
 import 'components/route_visual_component.dart';
 import 'components/factory_component.dart';
 import 'components/coop_component.dart';
+import 'domain/audio_controller.dart';
 
 enum ManagementMapSelection { starterPlot, farmhouse, grainBarn, toolShed }
 
@@ -357,7 +358,11 @@ class OpeningMowingWorld extends World {
       player.updateMowing(didMow, dt);
       if (didMow) {
         _burstGrassParticles(cuttingPoint);
+        AudioController.instance.playEffect(SoundEffect.mow);
         final newBales = session.groundBaleCount - groundBales.length;
+        if (newBales > 0) {
+          AudioController.instance.playEffect(SoundEffect.baleDrop);
+        }
         for (var i = 0; i < newBales; i++) {
           _spawnGroundBale(spawnNearPlayer: true);
         }
@@ -451,6 +456,7 @@ class OpeningMowingWorld extends World {
       _saleIntervalTimer = 0.0;
       if (session.sellOneBale()) {
         saleZone.triggerSaleEffect();
+        AudioController.instance.playEffect(SoundEffect.coinEarned);
         add(
           FloatingTextComponent(
             position: Vector2(
@@ -463,6 +469,7 @@ class OpeningMowingWorld extends World {
       }
     } else if (session.canSellBale && session.enterSaleZone()) {
       saleZone.triggerSaleEffect();
+      AudioController.instance.playEffect(SoundEffect.coinEarned);
       add(
         FloatingTextComponent(
           position: Vector2(saleZoneArea.center.dx, saleZoneArea.center.dy),

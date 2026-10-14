@@ -15,10 +15,15 @@ import '../domain/opening_crop_catalog.dart';
 import '../domain/procedural_farm_world.dart';
 import '../domain/tech_tree.dart';
 import 'farm_management_sheet.dart';
+import 'market_trade_sheet.dart';
 import 'tech_tree_overlay.dart';
+import 'story_comic_screen.dart';
+import '../domain/audio_controller.dart';
 
 const Color _mapInk = Color(0xFF18392A);
 const Color _mapGold = Color(0xFFFFC84F);
+
+String _itemName(String itemId) => FarmItemCatalog.nameFor(itemId);
 
 class WorldMapScreen extends StatefulWidget {
   const WorldMapScreen({
@@ -123,6 +128,33 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     _farmTicker.cancel();
     _fieldMachineController.dispose();
     super.dispose();
+  }
+
+  void _openStoryComic() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => StoryComicScreen(
+          onComplete: () {
+            Navigator.of(context).pop();
+            if (widget.session.tutorialStep == FarmTutorialStep.story) {
+              widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
+              widget.onSessionChanged();
+              final starter = widget.session.plotById(
+                widget.session.starterPlotId,
+              );
+              setState(() {
+                if (starter != null) {
+                  _selectedFarmPlotId = starter.id;
+                  _cameraCenter = Offset(starter.mapX, starter.mapY);
+                  _zoom = 0.9;
+                }
+              });
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Offset _screenToWorld(Offset screenPoint) {
@@ -244,7 +276,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   Text('${source.name} → Kasaba Pazarı'),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedProductId ?? '__any_stock__',
+                    initialValue: selectedProductId ?? '__any_stock__',
                     decoration: const InputDecoration(
                       labelText: 'Satılacak ürün',
                       border: OutlineInputBorder(),
@@ -415,6 +447,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       return;
     }
     widget.onSessionChanged();
+    AudioController.instance.playEffect(SoundEffect.drawRoute);
     setState(() {
       _salesRouteMode = false;
       _salesRouteStartPlotId = null;
@@ -558,14 +591,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           WorldMapPoint(starterMarketMapX, starterMarketMapY),
         ) <=
         38 / _zoom) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Satış noktası burası. İlk hattı çizmek için “Kasaba Pazarı” ve “Satış rotası” düğmelerini kullan.',
-          ),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      _openMarketTrade();
       return;
     }
 
@@ -719,7 +745,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final overlapGroup = vehicles
           .where(
             (candidate) =>
-                positions[candidate.id]!.distanceTo(worldPoint) <= 1,
+                (positions[candidate.id]! - worldPoint).distance <= 1,
           )
           .toList(growable: false);
       groupedIds.addAll(overlapGroup.map((candidate) => candidate.id));
@@ -1082,6 +1108,24 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     if (mounted) setState(() {});
   }
 
+  Future<void> _openMarketTrade() async {
+    HapticFeedback.lightImpact();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => MarketTradeSheet(
+        session: widget.session,
+        onChanged: () {
+          widget.onSessionChanged();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+    widget.onSessionChanged();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _openEquipmentStore() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1134,6 +1178,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
     });
+    _openMarketTrade();
   }
 
   Future<void> _openCoordinateSearch() async {
@@ -1382,6 +1427,112 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           ),
         ),
       );
+
+      // Tır Canlı Kargo ve Durum Rozeti
+      final fuelRatio = (vehicle.fuelLevel / 100.0).clamp(0.0, 1.0);
+      final wearRatio = (vehicle.wearPercent / 100.0).clamp(0.0, 1.0);
+      final fuelColor = fuelRatio > 0.4
+          ? const Color(0xFF4CAF50)
+          : fuelRatio > 0.15
+              ? const Color(0xFFFF9800)
+              : const Color(0xFFF44336);
+      final hasCargo = vehicle.cargoAmount > 0;
+
+      markers.add(
+        Positioned(
+          left: screenPoint.dx - 55,
+          top: screenPoint.dy - length / 2 - 18,
+          width: 110,
+          height: 18,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: const Color(0xDD1B3322),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: selected ? _mapGold : const Color(0x66FFFFFF),
+                  width: selected ? 1.5 : 0.8,
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (vehicle.status == VehicleStatus.loading) ...[
+                    const Icon(Icons.hourglass_top_rounded, color: _mapGold, size: 9),
+                    const SizedBox(width: 2),
+                    const Text('Yükleniyor', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ] else if (vehicle.status == VehicleStatus.unloading) ...[
+                    const Icon(Icons.unarchive_rounded, color: _mapGold, size: 9),
+                    const SizedBox(width: 2),
+                    const Text('Boşaltılıyor', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ] else if (hasCargo) ...[
+                    const Text('📦', style: TextStyle(fontSize: 8)),
+                    const SizedBox(width: 2),
+                    Text('${vehicle.cargoAmount}t', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ] else ...[
+                    Text(vehicle.id.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 7.5, fontWeight: FontWeight.w600)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Yakıt ve Aşınma Durum Çubukları
+      markers.add(
+        Positioned(
+          left: screenPoint.dx - 22,
+          top: screenPoint.dy + length / 2 + 3,
+          width: 44,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 3,
+                decoration: BoxDecoration(
+                  color: const Color(0x88000000),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: fuelRatio,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: fuelColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+              if (wearRatio > 0.05) ...[
+                const SizedBox(height: 1.5),
+                Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: const Color(0x66000000),
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: wearRatio,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.orangeAccent,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
     return markers;
   }
@@ -1429,7 +1580,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   @override
   Widget build(BuildContext context) {
     final balance = widget.session.farmCredits;
-    final ownedCount = widget.session.ownedPlotCount;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1569,137 +1719,31 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 bottom: false,
                 child: Column(
                   children: [
-                    _MapHeader(
+                    _TopActionBar(
                       balance: balance,
-                      ownedCount: ownedCount,
+                      onOpenResearch: _openResearch,
+                      onOpenEquipment: _openEquipmentStore,
+                      onBeginConstruction: _beginConstructionPlacement,
+                      constructionActive: _constructionPlacementMode,
+                      onOpenManagement: _openManagement,
+                      managementHighlighted:
+                          tutorialStep == FarmTutorialStep.management,
+                      onOpenWarehouse: _openWarehouseInventory,
+                      warehouseHighlighted:
+                          tutorialStep == FarmTutorialStep.warehouse ||
+                          tutorialStep == FarmTutorialStep.deliveryRoute ||
+                          tutorialStep == FarmTutorialStep.delivery,
+                      warehouseStock:
+                          widget.session.fleetManager.totalWarehouseAmount +
+                          widget.session.fleetManager.vehicles.fold<int>(
+                            0,
+                            (sum, vehicle) => sum + vehicle.cargoAmount,
+                          ),
+                      onFocusSalesPoint: _focusSalesPoint,
+                      salesHighlighted:
+                          tutorialStep == FarmTutorialStep.deliveryRoute ||
+                          _salesRouteMode,
                       onSearch: _openCoordinateSearch,
-                    ),
-                    const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final columns = constraints.maxWidth >= 1080
-                            ? 5
-                            : constraints.maxWidth >= 720
-                            ? 4
-                            : 3;
-                        return GridView.count(
-                          crossAxisCount: columns,
-                          mainAxisExtent: 40,
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            _MapToolChip(
-                              icon: Icons.storefront_rounded,
-                              label: 'Kasaba Pazarı',
-                              active: false,
-                              highlighted:
-                                  tutorialStep ==
-                                      FarmTutorialStep.deliveryRoute ||
-                                  _salesRouteMode,
-                              onTap: _focusSalesPoint,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.inventory_2_rounded,
-                              label:
-                                  'Ambar · ${widget.session.fleetManager.totalWarehouseAmount + widget.session.fleetManager.vehicles.fold<int>(0, (sum, vehicle) => sum + vehicle.cargoAmount)}',
-                              active: false,
-                              highlighted:
-                                  tutorialStep == FarmTutorialStep.warehouse ||
-                                  tutorialStep ==
-                                      FarmTutorialStep.deliveryRoute ||
-                                  tutorialStep == FarmTutorialStep.delivery,
-                              onTap: _openWarehouseInventory,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.dashboard_customize_rounded,
-                              label: 'Yönetim',
-                              active: false,
-                              highlighted:
-                                  tutorialStep == FarmTutorialStep.management,
-                              onTap: _openManagement,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.account_tree_rounded,
-                              label: 'Araştırma',
-                              active: false,
-                              onTap: _openResearch,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.storefront_rounded,
-                              label: 'Ekipman',
-                              active: false,
-                              highlighted:
-                                  tutorialStep == FarmTutorialStep.shop,
-                              onTap: _openEquipmentStore,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.construction_rounded,
-                              label: _constructionPlacementMode
-                                  ? 'Arazi seç'
-                                  : 'İnşaat',
-                              active: _constructionPlacementMode,
-                              highlighted: _constructionPlacementMode,
-                              onTap: _beginConstructionPlacement,
-                            ),
-                            _MapToolChip(
-                              icon: Icons.add_road_rounded,
-                              label: _salesRouteMode
-                                  ? 'Satış rotasını iptal et'
-                                  : _routeMode
-                                  ? 'Hat modundan çık'
-                                  : tutorialStep ==
-                                        FarmTutorialStep.deliveryRoute
-                                  ? 'Satış rotası çiz'
-                                  : 'Hat kur',
-                              active: _routeMode || _salesRouteMode,
-                              highlighted:
-                                  tutorialStep ==
-                                  FarmTutorialStep.deliveryRoute,
-                              onTap: () {
-                                if (_salesRouteMode) {
-                                  setState(() {
-                                    _salesRouteMode = false;
-                                    _salesRouteStartPlotId = null;
-                                  });
-                                } else if (tutorialStep ==
-                                    FarmTutorialStep.deliveryRoute) {
-                                  _beginSalesRouteDrawing();
-                                } else {
-                                  setState(() {
-                                    _routeMode = !_routeMode;
-                                    _measureMode = false;
-                                    _routeStartParcelId = null;
-                                    _measureStart = null;
-                                    _measureEnd = null;
-                                  });
-                                }
-                              },
-                            ),
-                            _MapToolChip(
-                              icon: Icons.straighten_rounded,
-                              label: _measureMode
-                                  ? 'Ölçümü bitir'
-                                  : 'Mesafe ölç',
-                              active: _measureMode,
-                              onTap: () => setState(() {
-                                _measureMode = !_measureMode;
-                                _routeMode = false;
-                                _routeStartParcelId = null;
-                                _measureStart = null;
-                                _measureEnd = null;
-                              }),
-                            ),
-                            _MapToolChip(
-                              icon: Icons.layers_rounded,
-                              label: 'Katmanlar',
-                              active: false,
-                              onTap: _openLayerOptions,
-                            ),
-                          ],
-                        );
-                      },
                     ),
                     if (tutorialStep != FarmTutorialStep.complete) ...[
                       const SizedBox(height: 8),
@@ -1709,6 +1753,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                           step: tutorialStep,
                           plot: tutorialPlot,
                           session: widget.session,
+                          onOpenComic: _openStoryComic,
                           onBegin: () {
                             widget.session.setFarmTutorialStep(
                               FarmTutorialStep.prepare,
@@ -1738,7 +1783,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             Positioned(
               top:
                   MediaQuery.paddingOf(context).top +
-                  (tutorialStep == FarmTutorialStep.complete ? 114 : 245),
+                  (tutorialStep == FarmTutorialStep.complete ? 54 : 148),
               right: 15,
               child: _MapCoordinates(
                 coordinates: cameraCoordinates,
@@ -1747,7 +1792,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             ),
             if (_salesRouteMode)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 155,
+                top: MediaQuery.paddingOf(context).top + 54,
                 left: 12,
                 right: 78,
                 child: _InstructionPill(
@@ -1759,7 +1804,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
             if (_routeMode)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 155,
+                top: MediaQuery.paddingOf(context).top + 54,
                 left: 12,
                 right: 78,
                 child: _InstructionPill(
@@ -1771,7 +1816,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
             if (_measureMode)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 155,
+                top: MediaQuery.paddingOf(context).top + 54,
                 left: 12,
                 right: 78,
                 child: _InstructionPill(
@@ -1812,7 +1857,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             ),
             if (_constructionPlacementMode)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 155,
+                top: MediaQuery.paddingOf(context).top + 54,
                 left: 12,
                 right: 78,
                 child: const _InstructionPill(
@@ -2032,11 +2077,44 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
             if (selectedParcel == null &&
                 selectedPlot == null &&
-                selectedVehicle == null &&
-                !_routeMode &&
-                !_measureMode &&
-                !_salesRouteMode)
-              Positioned(left: 14, bottom: 18, child: const _MapHint()),
+                selectedVehicle == null)
+              Positioned(
+                left: 14,
+                bottom: 18,
+                child: _BottomMapToolsBar(
+                  routeMode: _routeMode,
+                  salesRouteMode: _salesRouteMode,
+                  measureMode: _measureMode,
+                  tutorialStep: tutorialStep,
+                  onToggleRoute: () {
+                    if (_salesRouteMode) {
+                      setState(() {
+                        _salesRouteMode = false;
+                        _salesRouteStartPlotId = null;
+                      });
+                    } else if (tutorialStep ==
+                        FarmTutorialStep.deliveryRoute) {
+                      _beginSalesRouteDrawing();
+                    } else {
+                      setState(() {
+                        _routeMode = !_routeMode;
+                        _measureMode = false;
+                        _routeStartParcelId = null;
+                        _measureStart = null;
+                        _measureEnd = null;
+                      });
+                    }
+                  },
+                  onToggleMeasure: () => setState(() {
+                    _measureMode = !_measureMode;
+                    _routeMode = false;
+                    _routeStartParcelId = null;
+                    _measureStart = null;
+                    _measureEnd = null;
+                  }),
+                  onOpenLayers: _openLayerOptions,
+                ),
+              ),
             if (_zoom < 0.31)
               Positioned(
                 left: 14,
@@ -2079,7 +2157,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   selectedParcel == null &&
                       selectedPlot == null &&
                       selectedVehicle == null
-                  ? 90
+                  ? 66
                   : (isLandscape ? 124 : 360),
               child: _MapScaleBar(zoom: _zoom),
             ),
@@ -2090,90 +2168,87 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   }
 }
 
-class _MapHeader extends StatelessWidget {
-  const _MapHeader({
+class _TopActionBar extends StatelessWidget {
+  const _TopActionBar({
     required this.balance,
-    required this.ownedCount,
+    required this.onOpenResearch,
+    required this.onOpenEquipment,
+    required this.onBeginConstruction,
+    required this.constructionActive,
+    required this.onOpenManagement,
+    required this.managementHighlighted,
+    required this.onOpenWarehouse,
+    required this.warehouseHighlighted,
+    required this.warehouseStock,
+    required this.onFocusSalesPoint,
+    required this.salesHighlighted,
     required this.onSearch,
   });
 
   final int balance;
-  final int ownedCount;
+  final VoidCallback onOpenResearch;
+  final VoidCallback onOpenEquipment;
+  final VoidCallback onBeginConstruction;
+  final bool constructionActive;
+  final VoidCallback onOpenManagement;
+  final bool managementHighlighted;
+  final VoidCallback onOpenWarehouse;
+  final bool warehouseHighlighted;
+  final int warehouseStock;
+  final VoidCallback onFocusSalesPoint;
+  final bool salesHighlighted;
   final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: const Color(0xF2FFF9E9),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD6C99E), width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x44192E1D),
-            blurRadius: 14,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFF214D36),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.public_rounded, color: _mapGold, size: 22),
-          ),
-          const SizedBox(width: 9),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'ÇİFTLİK DÜNYASI',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _mapInk,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.35,
-                  ),
-                ),
-                Text(
-                  'PROSEDÜREL ARAZİ AĞI',
-                  style: TextStyle(
-                    color: Color(0xFF647255),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.7,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5EED8),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$ownedCount ARAZİ',
-              style: const TextStyle(
-                color: _mapInk,
-                fontSize: 8,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+          _BalancePill(balance: balance),
+          const SizedBox(width: 6),
+          _MapTopChip(
+            icon: Icons.account_tree_rounded,
+            label: 'Araştırma',
+            onTap: onOpenResearch,
           ),
           const SizedBox(width: 5),
-          _BalancePill(balance: balance),
+          _MapTopChip(
+            icon: Icons.storefront_rounded,
+            label: 'Ekipman',
+            onTap: onOpenEquipment,
+          ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.construction_rounded,
+            label: constructionActive ? 'Arazi seç' : 'İnşaat',
+            active: constructionActive,
+            highlighted: constructionActive,
+            onTap: onBeginConstruction,
+          ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.dashboard_customize_rounded,
+            label: 'Yönetim',
+            highlighted: managementHighlighted,
+            onTap: onOpenManagement,
+          ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.inventory_2_rounded,
+            label: 'Ambar · $warehouseStock',
+            highlighted: warehouseHighlighted,
+            onTap: onOpenWarehouse,
+          ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.storefront_rounded,
+            label: 'Kasaba Pazarı',
+            highlighted: salesHighlighted,
+            onTap: onFocusSalesPoint,
+          ),
           const SizedBox(width: 4),
           _HeaderIconButton(
             icon: Icons.search_rounded,
@@ -2181,6 +2256,208 @@ class _MapHeader extends StatelessWidget {
             onTap: onSearch,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MapTopChip extends StatelessWidget {
+  const _MapTopChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool active;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? const Color(0xFF214D36) : const Color(0xF2FFF9E9),
+      borderRadius: BorderRadius.circular(12),
+      elevation: highlighted ? 6 : 2,
+      shadowColor: highlighted ? const Color(0xFFFFC84F) : const Color(0x33000000),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: highlighted
+                  ? const Color(0xFFFFB02E)
+                  : active
+                      ? const Color(0xFF214D36)
+                      : const Color(0xFFD6C99E),
+              width: highlighted ? 2.0 : 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: active
+                    ? _mapGold
+                    : (highlighted ? const Color(0xFFB57C00) : _mapInk),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : _mapInk,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomMapToolsBar extends StatelessWidget {
+  const _BottomMapToolsBar({
+    required this.routeMode,
+    required this.salesRouteMode,
+    required this.measureMode,
+    required this.tutorialStep,
+    required this.onToggleRoute,
+    required this.onToggleMeasure,
+    required this.onOpenLayers,
+  });
+
+  final bool routeMode;
+  final bool salesRouteMode;
+  final bool measureMode;
+  final FarmTutorialStep tutorialStep;
+  final VoidCallback onToggleRoute;
+  final VoidCallback onToggleMeasure;
+  final VoidCallback onOpenLayers;
+
+  @override
+  Widget build(BuildContext context) {
+    final routeActive = routeMode || salesRouteMode;
+    final routeHighlighted = tutorialStep == FarmTutorialStep.deliveryRoute;
+    final routeLabel = salesRouteMode
+        ? 'Rotayı İptal Et'
+        : routeMode
+            ? 'Hat Kapat'
+            : tutorialStep == FarmTutorialStep.deliveryRoute
+                ? 'Satış Rotası Çiz'
+                : 'Hat Kur';
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xF2FFF9E9),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD6C99E), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x38192E1D),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _DockButton(
+            icon: Icons.add_road_rounded,
+            label: routeLabel,
+            active: routeActive,
+            highlighted: routeHighlighted,
+            onTap: onToggleRoute,
+          ),
+          const SizedBox(width: 4),
+          _DockButton(
+            icon: Icons.straighten_rounded,
+            label: measureMode ? 'Ölçümü Bitir' : 'Mesafe Ölç',
+            active: measureMode,
+            onTap: onToggleMeasure,
+          ),
+          const SizedBox(width: 4),
+          _DockButton(
+            icon: Icons.layers_rounded,
+            label: 'Katmanlar',
+            active: false,
+            onTap: onOpenLayers,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DockButton extends StatelessWidget {
+  const _DockButton({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? const Color(0xFF214D36) : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: highlighted
+                ? Border.all(color: const Color(0xFFFFB02E), width: 1.8)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: active
+                    ? _mapGold
+                    : (highlighted
+                        ? const Color(0xFFB57C00)
+                        : const Color(0xFF385E38)),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : _mapInk,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2242,62 +2519,6 @@ class _HeaderIconButton extends StatelessWidget {
   );
 }
 
-class _MapToolChip extends StatelessWidget {
-  const _MapToolChip({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.highlighted = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: active ? const Color(0xFF214D36) : const Color(0xF2FFF9E9),
-    borderRadius: BorderRadius.circular(14),
-    elevation: highlighted ? 7 : 2,
-    shadowColor: highlighted ? const Color(0xFFFFC84F) : null,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: highlighted
-              ? Border.all(color: const Color(0xFFFFB02E), width: 2.4)
-              : null,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Icon(icon, size: 16, color: active ? _mapGold : _mapInk),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: active ? Colors.white : _mapInk,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                  decoration: highlighted ? TextDecoration.underline : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
 
 class _MapCoordinates extends StatelessWidget {
   const _MapCoordinates({required this.coordinates, required this.zoom});
@@ -2365,12 +2586,14 @@ class _FarmTutorialCoach extends StatelessWidget {
     required this.plot,
     required this.session,
     required this.onBegin,
+    this.onOpenComic,
   });
 
   final FarmTutorialStep step;
   final CropPlotState? plot;
   final OpeningSession session;
   final VoidCallback onBegin;
+  final VoidCallback? onOpenComic;
 
   @override
   Widget build(BuildContext context) {
@@ -2381,8 +2604,8 @@ class _FarmTutorialCoach extends StatelessWidget {
     );
     final (title, message, stepIndex) = switch (step) {
       FarmTutorialStep.story => (
-        'AYLA USTA’NIN EMANETİ',
-        'Sabah kapıda eski bir traktör, temel makineler ve deden için bir not var. Yakındaki Kuzey Tarlası artık senin: “Buğdayla başla; ürünü ambarda tut, satış hattını kendin kur.”',
+        'AYLA USTA’NIN MİRASI: DEMİR MAHSUL',
+        'Ayla Demirsoy ve dedenin emanetleri gün yüzüne çıktı: Takviyeli Kıyı 18 traktörü, ata tohumları ve Kuzey Tarlası hazır. Çizgi romanı incele ve vadiyi ayağa kaldır!',
         0,
       ),
       FarmTutorialStep.prepare => (
@@ -2526,21 +2749,70 @@ class _FarmTutorialCoach extends StatelessWidget {
                 ],
                 if (step == FarmTutorialStep.story) ...[
                   const SizedBox(height: 7),
-                  SizedBox(
-                    height: 32,
-                    child: FilledButton.icon(
-                      onPressed: onBegin,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFC84F),
-                        foregroundColor: const Color(0xFF35270D),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (onOpenComic != null)
+                        SizedBox(
+                          height: 32,
+                          child: FilledButton.icon(
+                            onPressed: onOpenComic,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E293B),
+                              foregroundColor: const Color(0xFFFFD166),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              side: const BorderSide(color: Color(0xFFFFD166), width: 1.5),
+                            ),
+                            icon: const Icon(Icons.auto_stories, size: 16),
+                            label: const Text(
+                              '📖 ÇİZGİ ROMANI OKU',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      SizedBox(
+                        height: 32,
+                        child: FilledButton.icon(
+                          onPressed: onBegin,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFC84F),
+                            foregroundColor: const Color(0xFF35270D),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 17),
+                          label: const Text(
+                            'TARLAYA GİT',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                       ),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 17),
+                    ],
+                  ),
+                ] else if (onOpenComic != null) ...[
+                  const SizedBox(height: 5),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: onOpenComic,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.auto_stories, size: 13, color: Color(0xFF8A6D23)),
                       label: const Text(
-                        'TARLAYA GİT',
+                        'Ayla Usta’nın Çizgi Romanı',
                         style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
+                          fontSize: 8.5,
+                          color: Color(0xFF8A6D23),
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -6059,6 +6331,92 @@ class _ParcelStat extends StatelessWidget {
   );
 }
 
+class _MeterRow extends StatelessWidget {
+  const _MeterRow({
+    required this.label,
+    required this.value,
+    required this.trailing,
+  });
+
+  final String label;
+  final double value;
+  final String trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final clampedValue = value.clamp(0.0, 1.0);
+    final isFuel = label.toLowerCase().contains('yakıt');
+    final Color barColor;
+    if (isFuel) {
+      if (clampedValue < 0.2) {
+        barColor = const Color(0xFFD9534F);
+      } else if (clampedValue < 0.5) {
+        barColor = const Color(0xFFF0AD4E);
+      } else {
+        barColor = const Color(0xFF4C8C4A);
+      }
+    } else {
+      // Wear/Aşınma: High wear is dangerous
+      if (clampedValue > 0.75) {
+        barColor = const Color(0xFFD9534F);
+      } else if (clampedValue > 0.4) {
+        barColor = const Color(0xFFE67E22);
+      } else {
+        barColor = const Color(0xFF2E7D32);
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F6F0),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFDFE4D6)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 48,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF5A6650),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: clampedValue,
+                minHeight: 5,
+                backgroundColor: const Color(0xFFD8DDCF),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 32,
+            child: Text(
+              trailing,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: _mapInk,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LayerSwitch extends StatelessWidget {
   const _LayerSwitch({
     required this.icon,
@@ -6124,34 +6482,6 @@ class _LegendItem extends StatelessWidget {
   );
 }
 
-class _MapHint extends StatelessWidget {
-  const _MapHint();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-    decoration: BoxDecoration(
-      color: const Color(0xE8FFF9E9),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFD6C99E)),
-    ),
-    child: const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.touch_app_rounded, size: 15, color: Color(0xFF507241)),
-        SizedBox(width: 6),
-        Text(
-          'Haritayı sürükle · Parsel seç · İki parmakla yakınlaştır',
-          style: TextStyle(
-            color: _mapInk,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
-  );
-}
 
 class _MapScaleBar extends StatelessWidget {
   const _MapScaleBar({required this.zoom});
@@ -7656,7 +7986,7 @@ class _FarmConstructionMenuState extends State<_FarmConstructionMenu> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  canBuild ? 'Araştırma: $requirements' : reason!,
+                  canBuild ? 'Araştırma: $requirements' : reason,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -7720,8 +8050,9 @@ String? _buildingBlockReason(
   if (parcel.areaHectares < definition.minimumAreaHectares) {
     return 'Bu yapı için en az ${definition.minimumAreaHectares.toStringAsFixed(2)} ha gerekir';
   }
-  if (session.buildingOnParcel(parcel.id) != null)
+  if (session.buildingOnParcel(parcel.id) != null) {
     return 'Bu arazide zaten yapı var';
+  }
   final plot = session.plotForWorldParcel(parcel.id);
   if (plot != null &&
       (plot.hasActiveCrop || plot.hasActiveJob || plot.readyGrassBales > 0)) {

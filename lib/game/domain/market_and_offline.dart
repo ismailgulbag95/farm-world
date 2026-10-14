@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'farm_calendar.dart';
-import 'opening_crop_catalog.dart';
 import 'opening_session.dart';
 import 'market_price_simulator.dart';
 
@@ -112,6 +111,7 @@ class OfflineProgressSimulator {
       processedCount += currentOutput - previousOutput;
       session.advanceLivestock(dt, now: simTime);
       session.advanceBuildingOperatingCosts(simTime);
+      session.advanceFarmOperations(simTime);
 
       // 3. Harvest ripe plots if ready and re-plant
       for (final plot in session.plots) {

@@ -51,6 +51,9 @@ void main() {
       // Now unlockable!
       expect(engine.getNodeStatus(h03, session), equals(TechNodeStatus.unlockable));
 
+      // Provide credits to afford H03 (costs 250 ÇK)
+      session.addCredits(500);
+
       // Purchase H03
       expect(engine.canPurchaseNode('H03', session), isTrue);
       expect(engine.purchaseNode('H03', session), isTrue);
@@ -78,9 +81,22 @@ void main() {
       expect(session.cropDiversityCount, equals(1));
       expect(engine.getNodeStatus(t15, session), equals(TechNodeStatus.locked));
 
+      // Ambardaki ürünü pazar rotasıyla satarak başlangıç ticaretini tamamla
+      expect(
+        session.startStarterMarketRoute(
+          fieldX: 100,
+          fieldY: 100,
+          fieldName: 'Başlangıç Tarlası',
+        ),
+        isTrue,
+      );
+      session.advanceLogistics(20.0);
+      expect(session.hasCompletedStarterTrade, isTrue);
+
       // Unlock and harvest sunflower (Oilseed family in spring season -> V = 2)
       session.unlockTechnology('T05');
       session.unlockTechnology('T13');
+      expect(session.canPlantCrop(OpeningCropCatalog.sunflowerId), isTrue);
       session.plantCrop(OpeningCropCatalog.sunflowerId, now);
       session.harvestCrop(now.add(const Duration(minutes: 15)));
       expect(session.cropDiversityCount, equals(2));
@@ -99,24 +115,26 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: TechTreeOverlay(session: session),
+          home: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Scaffold(
+              body: TechTreeOverlay(session: session),
+            ),
           ),
         ),
       );
-
-      // Verify title and chips
-      expect(find.text('Teknoloji & Araştırma Ağacı'), findsOneWidget);
-      expect(find.text('Tümü'), findsOneWidget);
-
-      // Filter by processing branch
-      final processingChip = find.text('🏭 İşleme & Fabrika');
-      expect(processingChip, findsOneWidget);
-      await tester.tap(processingChip);
       await tester.pumpAndSettle();
 
-      // Değirmen node is present
-      expect(find.text('PR01'), findsOneWidget);
+      // Verify title and rail
+      expect(find.text('ÇİFTLİK ARAŞTIRMALARI'), findsOneWidget);
+      expect(find.text('TÜM DALLAR'), findsOneWidget);
+
+      // Search for visible starter node H01
+      await tester.enterText(find.byType(TextField), 'H01');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('H01'), findsWidgets);
     });
   });
 }

@@ -63,8 +63,8 @@ void main() {
         });
         expect(session.cropDiversityEvidenceCount, 2);
         expect(session.hasCompletedV1Diversity, isTrue);
-        expect(session.farmCredits, 2219);
-        expect(session.lifetimeProductionEvidence, 2617);
+        expect(session.farmCredits, 602);
+        expect(session.lifetimeProductionEvidence, 2520);
       },
     );
 
@@ -92,7 +92,10 @@ void main() {
         isTrue,
       );
       final readyAt = plantedAt.add(const Duration(minutes: 15));
-      expect(session.cropSnapshotAt(readyAt)!.harvestYield, 1212.75);
+      expect(
+        session.cropSnapshotAt(readyAt)!.harvestYield,
+        closeTo(1139.985, 0.001),
+      );
       expect(session.harvestCrop(readyAt), isTrue);
       expect(session.state.fullHarvestedCropIds, isEmpty);
       expect(session.hasCompletedV1Diversity, isFalse);

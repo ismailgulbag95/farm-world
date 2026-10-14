@@ -6,12 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 
+import 'game/domain/farm_equipment.dart';
 import 'game/domain/opening_session.dart';
 import 'game/domain/opening_crop_catalog.dart';
 import 'game/domain/market_and_offline.dart';
 import 'game/farm_world_game.dart';
 import 'game/opening_mowing_world.dart';
 import 'game/persistence/opening_session_store.dart';
+import 'game/ui/game_loading_screen.dart';
+import 'game/ui/story_comic_screen.dart';
 import 'game/ui/tech_tree_overlay.dart';
 import 'game/ui/world_map_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -46,6 +49,12 @@ void main() async {
   runApp(WorldMapPrototypeApp(store: store, session: session));
 }
 
+enum _AppLaunchPhase {
+  loading,
+  comic,
+  worldMap,
+}
+
 class WorldMapPrototypeApp extends StatefulWidget {
   const WorldMapPrototypeApp({
     super.key,
@@ -66,11 +75,33 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
     store: widget.store,
   )..start();
 
+  _AppLaunchPhase _phase = _AppLaunchPhase.loading;
+
   @override
   void dispose() {
     _autosaver.flush();
     _autosaver.dispose();
     super.dispose();
+  }
+
+  void _onLoadingComplete() {
+    setState(() {
+      if (widget.session.tutorialStep == FarmTutorialStep.story) {
+        _phase = _AppLaunchPhase.comic;
+      } else {
+        _phase = _AppLaunchPhase.worldMap;
+      }
+    });
+  }
+
+  void _onComicComplete() {
+    if (widget.session.tutorialStep == FarmTutorialStep.story) {
+      widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
+      _autosaver.flush();
+    }
+    setState(() {
+      _phase = _AppLaunchPhase.worldMap;
+    });
   }
 
   @override
@@ -91,12 +122,20 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
       ),
       fontFamily: 'Roboto',
     ),
-    home: Scaffold(
-      body: WorldMapScreen(
-        session: widget.session,
-        onSessionChanged: () => _autosaver.flush(),
-      ),
-    ),
+    home: switch (_phase) {
+      _AppLaunchPhase.loading => GameLoadingScreen(
+          onLoadingComplete: _onLoadingComplete,
+        ),
+      _AppLaunchPhase.comic => StoryComicScreen(
+          onComplete: _onComicComplete,
+        ),
+      _AppLaunchPhase.worldMap => Scaffold(
+          body: WorldMapScreen(
+            session: widget.session,
+            onSessionChanged: () => _autosaver.flush(),
+          ),
+        ),
+    },
   );
 }
 
@@ -173,6 +212,7 @@ class FarmWorldAppState extends State<FarmWorldApp> {
   late final FarmWorldGame _game;
   OpeningSessionAutosaver? _autosaver;
   Locale? _localeOverride;
+  bool _showWorldMap = false;
 
   OpeningSession get session => _session;
   OpeningSessionStore? get store => _store;
@@ -183,11 +223,17 @@ class FarmWorldAppState extends State<FarmWorldApp> {
   void initState() {
     super.initState();
     _session = widget.session ?? OpeningSession();
-    if (!_session.isManagementStage) {
-      _session.skipToManagement();
-    }
     _store = widget.store;
     _game = FarmWorldGame(session: _session);
+    _showWorldMap = false;
+
+    _game.onManagementTransitionComplete = () {
+      if (mounted) {
+        setState(() {
+          _showWorldMap = true;
+        });
+      }
+    };
 
     final store = _store;
     if (store != null && store.canSave) {
@@ -240,19 +286,60 @@ class FarmWorldAppState extends State<FarmWorldApp> {
         builder: (context) {
           final l10n = AppLocalizations.of(context)!;
           return Scaffold(
-            body: Semantics(
-              container: true,
-              label: l10n.gameplayAccessibility,
-              child: GameWidget<FarmWorldGame>(
-                game: _game,
-                overlayBuilderMap: {
-                  'openingHud': (context, game) => OpeningHudOverlay(
-                    game: game,
-                    onLocaleSelected: _selectLocale,
+            body: Stack(
+              children: [
+                Semantics(
+                  container: true,
+                  label: l10n.gameplayAccessibility,
+                  child: GameWidget<FarmWorldGame>(
+                    game: _game,
+                    overlayBuilderMap: {
+                      'openingHud': (context, game) => OpeningHudOverlay(
+                        game: game,
+                        onLocaleSelected: _selectLocale,
+                      ),
+                    },
+                    initialActiveOverlays: const ['openingHud'],
                   ),
-                },
-                initialActiveOverlays: const ['openingHud'],
-              ),
+                ),
+                if (_showWorldMap)
+                  Positioned.fill(
+                    child: WorldMapScreen(
+                      session: _session,
+                      onSessionChanged: () {
+                        _autosaver?.flush();
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                // Geliştirici Kolaylığı: Sadece Debug modda görünen hızlı geçiş butonu
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: SafeArea(
+                    child: Opacity(
+                      opacity: 0.85,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xDD1B3929),
+                          foregroundColor: const Color(0xFFFFC84F),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.bolt_rounded, size: 14),
+                        label: const Text('Yönetime Geç', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                        onPressed: () {
+                          _game.skipToManagement();
+                          setState(() {
+                            _showWorldMap = true;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
         },

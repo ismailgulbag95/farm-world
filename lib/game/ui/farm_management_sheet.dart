@@ -11,10 +11,11 @@ import '../domain/opening_session.dart';
 import '../domain/processing_plant.dart';
 import '../domain/market_price_simulator.dart';
 import '../domain/farm_item_catalog.dart';
+import '../domain/farm_equipment.dart';
+import 'market_trade_sheet.dart';
 
 const Color _panelInk = Color(0xFF18392A);
 const Color _panelGreen = Color(0xFF28583D);
-const Color _panelGold = Color(0xFFFFC84F);
 
 class FarmManagementSheet extends StatefulWidget {
   const FarmManagementSheet({
@@ -107,6 +108,7 @@ class _FarmManagementSheetState extends State<FarmManagementSheet> {
                   _FieldsPanel(
                     session: session,
                     onSelectPlot: widget.onSelectPlot,
+                    onChanged: _changed,
                   ),
                   _FleetPanel(
                     session: session,
@@ -132,10 +134,15 @@ class _FarmManagementSheetState extends State<FarmManagementSheet> {
 }
 
 class _FieldsPanel extends StatelessWidget {
-  const _FieldsPanel({required this.session, required this.onSelectPlot});
+  const _FieldsPanel({
+    required this.session,
+    required this.onSelectPlot,
+    required this.onChanged,
+  });
 
   final OpeningSession session;
   final ValueChanged<CropPlotState> onSelectPlot;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +154,13 @@ class _FieldsPanel extends StatelessWidget {
         body: 'Haritadan bir arazi satın alıp üretime açabilirsin.',
       );
     }
+    final now = DateTime.now();
+    final anchor = session.firstSuccessfulPlantingAt ?? now;
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
       itemCount: plots.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final plot = plots[index];
         final recent = plot.recentCropFamilies
@@ -160,38 +170,248 @@ class _FieldsPanel extends StatelessWidget {
         final activeCrop = plot.activeCropId == null
             ? (plot.use == CropPlotUse.pasture ? 'Çayır' : 'Boş tarla')
             : _itemName(plot.activeCropId!);
+
+        final snapshot = plot.hasActiveCrop ? plot.cropSnapshotAt(now, anchor) : null;
+        final isHarvestable = snapshot?.isHarvestable ?? false;
+        final isGrowing = snapshot != null && !isHarvestable;
+        final hasActiveJob = plot.hasActiveJob;
+
         return Card(
           margin: EdgeInsets.zero,
-          color: Colors.white.withValues(alpha: 0.78),
-          child: ListTile(
-            onTap: () {
-              Navigator.of(context).pop();
-              onSelectPlot(plot);
-            },
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFFEAF0E2),
-              child: Icon(
-                plot.use == CropPlotUse.pasture
-                    ? Icons.grass_rounded
-                    : Icons.agriculture_rounded,
-                color: _panelGreen,
-              ),
+          elevation: 1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          color: Colors.white.withValues(alpha: 0.88),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: const Color(0xFFEAF0E2),
+                      child: Icon(
+                        plot.use == CropPlotUse.pasture
+                            ? Icons.grass_rounded
+                            : Icons.agriculture_rounded,
+                        color: _panelGreen,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            plot.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              color: _panelInk,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$activeCrop · ${(plot.areaSquareMeters / 10000).toStringAsFixed(2)} ha · Toprak: ${plot.soilConditionPoints}/100',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF5A6650),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (recent.isNotEmpty)
+                            Text(
+                              'Geçmiş: $recent',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF7A8670),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Haritada Göster',
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onSelectPlot(plot);
+                      },
+                      icon: const Icon(Icons.my_location_rounded, size: 20, color: _panelGreen),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (hasActiveJob) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3D6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF886000)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'İş sürüyor: ${_jobName(plot.activeJob!.operation)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF886000),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (isHarvestable) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 36,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF28583D),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () {
+                        if (session.harvestCropOnPlot(plot.id, now)) {
+                          session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
+                          onChanged();
+                        }
+                      },
+                      icon: const Icon(Icons.archive_rounded, size: 16),
+                      label: const Text(
+                        'ÜRÜNÜ HASAT ET (AMBARA GÖNDER)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ),
+                  ),
+                ] else if (isGrowing) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: snapshot.growthProgress.clamp(0.0, 1.0),
+                      minHeight: 8,
+                      backgroundColor: const Color(0xFFE2EAD8),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF5A8E48)),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Olgunlaşıyor: %${(snapshot.growthProgress * 100).toInt()}',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF5A8E48)),
+                  ),
+                ] else if (plot.use == CropPlotUse.pasture) ...[
+                  if (session.canBalePasturePlot(plot.id, now))
+                    SizedBox(
+                      width: double.infinity,
+                      height: 36,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF7A8B43),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          if (session.balePasturePlot(plot.id, now)) {
+                            session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
+                            onChanged();
+                          }
+                        },
+                        icon: const Icon(Icons.inventory_2_rounded, size: 16),
+                        label: const Text('ÇAYIRI BİÇ VE BALYALA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
+                    )
+                  else
+                    Text(
+                      plot.readyGrassBales > 0
+                          ? '${plot.readyGrassBales} balya hazır'
+                          : 'Çayır büyüme sürecinde',
+                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF707E60)),
+                    ),
+                ] else ...[
+                  // Arable plot - check cultivation and planting
+                  if (!plot.isCultivated) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 36,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _panelGreen,
+                          side: const BorderSide(color: Color(0xFF86A775)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: session.canCultivatePlot(plot.id)
+                            ? () {
+                                if (session.cultivatePlot(plot.id, now)) {
+                                  session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
+                                  onChanged();
+                                }
+                              }
+                            : null,
+                        icon: const Icon(Icons.terrain_rounded, size: 16),
+                        label: const Text(
+                          'TARLAYI HAZIRLA (SÜRÜM)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final cropId in [
+                          OpeningSession.starterWheatId,
+                          OpeningSession.starterMaizeId,
+                          OpeningCropCatalog.sunflowerId,
+                          OpeningCropCatalog.potatoId,
+                          OpeningCropCatalog.chickpeaId,
+                        ])
+                          if (session.canPlantCropOnPlot(plot.id, cropId))
+                            FilledButton.tonal(
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () {
+                                if (session.plantCropOnPlot(plot.id, cropId, now)) {
+                                  session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
+                                  onChanged();
+                                }
+                              },
+                              child: Text(
+                                '+ ${_itemName(cropId)} Ek',
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ],
+                ],
+              ],
             ),
-            title: Text(
-              plot.name,
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            subtitle: Text(
-              '$activeCrop · ${(plot.areaSquareMeters / 10000).toStringAsFixed(2)} ha · Toprak ${plot.soilConditionPoints}/100\n'
-              'Son ekimler: ${recent.isEmpty ? 'Henüz geçmiş yok' : recent}',
-            ),
-            isThreeLine: true,
-            trailing: const Icon(Icons.chevron_right_rounded),
           ),
         );
       },
     );
   }
+
+  String _jobName(FarmOperation op) => switch (op) {
+    FarmOperation.prepare => 'Sürüm / Hazırlık',
+    FarmOperation.fertilize => 'Gübreleme',
+    FarmOperation.sow => 'Ekim',
+    FarmOperation.harvest => 'Hasat',
+    FarmOperation.bale => 'Balyalama',
+  };
 }
 
 class _FleetPanel extends StatelessWidget {
@@ -399,8 +619,9 @@ class _FleetPanel extends StatelessWidget {
                       child: TextButton.icon(
                         onPressed: session.farmCredits >= serviceCost
                             ? () {
-                                if (session.serviceFleetVehicle(vehicle.id))
+                                if (session.serviceFleetVehicle(vehicle.id)) {
                                   onChanged();
+                                }
                               }
                             : null,
                         icon: const Icon(Icons.build_circle_outlined, size: 17),
@@ -639,7 +860,27 @@ class _MarketPanel extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 9),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _panelGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.storefront_rounded, color: Color(0xFFFFC84F), size: 18),
+            label: const Text(
+              'BORSA & SEVKİYAT EKRANINI AÇ',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
+            ),
+            onPressed: () {
+              MarketTradeSheet.show(context, session, () {});
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
         for (final itemId in itemIds)
           _MarketItemCard(session: session, itemId: itemId),
       ],
@@ -849,8 +1090,9 @@ class _ContractsPanel extends StatelessWidget {
                       FilledButton(
                         onPressed: canAccept
                             ? () {
-                                if (session.acceptDeliveryContract(contract.id))
+                                if (session.acceptDeliveryContract(contract.id)) {
                                   onChanged();
+                                }
                               }
                             : null,
                         style: FilledButton.styleFrom(
