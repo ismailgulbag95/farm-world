@@ -31,6 +31,7 @@ flutter:
     - assets/images/equipment/
     - assets/images/logistics/
     - assets/images/products/
+    - assets/images/map/
     - assets/images/management/starter-buildings-v1.png
     - assets/visual-concepts/pilot/scythe-mowing-overhead-v1.png
     - assets/visual-concepts/pilot/crop-cereal-early-v1.png
