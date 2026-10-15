@@ -1,33 +1,23 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-import '../domain/farm_equipment.dart';
-
-/// Çizgi Roman / Görsel Hikaye Paneli Modeli
+/// A compact story beat carried mostly by its illustration.
 class ComicPanelData {
   const ComicPanelData({
-    required this.chapterTitle,
-    required this.speakerName,
-    required this.speakerRole,
-    required this.dialogue,
-    required this.narration,
+    required this.caption,
     required this.imageAssetPath,
-    this.featuredEquipmentId,
-    this.featuredItemTag,
+    this.imageAlignment = Alignment.center,
     this.accentColor = const Color(0xFFD4A373),
   });
 
-  final String chapterTitle;
-  final String speakerName;
-  final String speakerRole;
-  final String dialogue;
-  final String narration;
+  final String caption;
   final String imageAssetPath;
-  final String? featuredEquipmentId;
-  final String? featuredItemTag;
+  final Alignment imageAlignment;
   final Color accentColor;
 }
 
-/// Ayla Demirsoy ve Dedenin Hikayesi - Pastoral Çizgi Roman & Hikaye Ekranı
+/// Image-first introduction to Ayla and the inherited farm.
 class StoryComicScreen extends StatefulWidget {
   const StoryComicScreen({
     super.key,
@@ -48,66 +38,35 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
 
   static const List<ComicPanelData> _panels = [
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 1 · SARI VADİ’YE VARIŞ VE MÜHÜRLÜ MEKTUP',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis & Dedenin Kadim Dostu',
-      narration: 'Gece ekspresi Sarı Vadi istasyonunda durduğunda etraf sessizdi. Eski atölyenin meşe masasında, deden Kerim’in mühürlediği ve Ayla Usta’nın bıraktığı gizli emanet mektubu seni bekliyordu...',
-      dialogue: '“Evlat... Deden Kerim sırra kadem basmadan önce vadiyi açgözlü konsorsiyumun tekeline bırakmamak için her şeyi hazırladı. Bu topraklar ancak çeliğin ve tohumun dilinden anlayan bir mirasçıyla ayağa kalkar!”',
+      caption: 'Dedenin mektubu seni çağırıyor.',
       imageAssetPath: 'assets/images/story/panel1_letter.jpg',
       accentColor: Color(0xFFB45309),
     ),
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 2 · HANGARDAKİ DEV: KIYI 18 TRAKTÖRÜ',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis',
-      narration: 'Atölyenin ahşap kapıları aralandığında, güneş huzmelerinin altında emektar bir canavar belirdi: Dedenin elleriyle modifiye ettiği 90 beygirlik takviyeli Kıyı 18 Traktörü!',
-      dialogue: '“İşte tarlanın kalbi! 4x4 çift çeker şanzımanı ve yüksek torklu motoru var. Bu traktörle aşamayacağın çamur, süremeyeceğin yamaç yok. Anahtarı çevir ve sesini dinle!”',
+      caption: 'Eski traktör yeniden hazır.',
       imageAssetPath: 'assets/images/story/panel2_tractor.jpg',
-      featuredEquipmentId: 'tractor_starter',
-      featuredItemTag: 'EFSANEVİ 4X4 ÇİFTLİK TRAKTÖRÜ',
       accentColor: Color(0xFF2E7D32),
     ),
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 3 · TOPRAĞI UYANDIRAN ÇELİK',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis',
-      narration: 'Tarlanın sertleşmiş tabakasını kırmak için üç tırnaklı Kıyı 18 kültivatörü ve Serpici 600 gübreleme tablası hazır bekliyor.',
-      dialogue: '“Toprak taşlaşmış evlat. Önce kültivatörle kökleri 40 santim derinlikten havalandıracaksın, sonra gübre serpicisiyle toprağa can suyunu ve mineralini vereceksin.”',
+      caption: 'Toprağı birlikte uyandıralım.',
       imageAssetPath: 'assets/images/story/panel3_cultivator.jpg',
-      featuredEquipmentId: 'prep_starter',
-      featuredItemTag: 'KÜLTİVATÖR & GÜBRE SERPİCİ',
       accentColor: Color(0xFF8D6E63),
     ),
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 4 · DEDENİN KASASI VE KADİM ATA TOHUMLARI',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis',
-      narration: 'Atölyenin zeminindeki kilitli sandık açıldığında, parıldayan altın taneleri saçıldı. Yanındaki 4 sıralı Ekin mibzeri, tohumları toprağa tek tek bırakmaya hazır.',
-      dialogue: '“Agrotek’in tekel tohumlarına boyun eğmedik! Bu sandıkta dedenin nesillerdir sakladığı saf kehribar buğdayı var. Mibzerin haznesine dök; tek bir tanesi bile ziyan olmayacak.”',
+      caption: 'Ata tohumlarını ek.',
       imageAssetPath: 'assets/images/story/panel4_seeds.jpg',
-      featuredEquipmentId: 'sow_starter',
-      featuredItemTag: 'HASSAS MİBZER & ATA TOHUMLARI',
+      imageAlignment: Alignment(-0.25, 0),
       accentColor: Color(0xFFD97706),
     ),
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 5 · ALTIN HASAT VE BAĞIMSIZ AMBAR',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis',
-      narration: 'Uçsuz bucaksız sarı başakların arasında Harman 3 Kompakt Biçerdöveri çalışacak; her buğday tanesini yabancı otdan ayırıp doğrudan ambara aktaracak.',
-      dialogue: '“Hasat günü gelince emeğini aracılara kaptırma! Mahsulü doğrudan kendi ambarına çekecek, kasaba pazarına satış rotasını bizzat kendin kuracaksın.”',
+      caption: 'İlk hasat, senin emeğin.',
       imageAssetPath: 'assets/images/story/panel5_harvester.jpg',
-      featuredEquipmentId: 'harvest_starter',
-      featuredItemTag: 'KOMPAKT BİÇERDÖVER',
       accentColor: Color(0xFFC2410C),
     ),
     ComicPanelData(
-      chapterTitle: 'BÖLÜM 6 · ÇİZMELERİ GİY, MİRAS SENİNDİR!',
-      speakerName: 'AYLA DEMİRSOY',
-      speakerRole: 'Başmühendis',
-      narration: 'Ayla Usta, Kuzey Tarlası’nın mühürlü tapusunu ve sarı deri iş eldivenlerini uzattı. Ufukta güneş Sarı Vadi’nin tepelerinden yükseliyor, bereket kokusu yayılıyordu.',
-      dialogue: '“İşte Kuzey Tarlası tapusu ve başlangıç sermayen! Şimdi çizmeleri ayağına geçir, kontağı çevir. Sarı Vadi’yi yeniden bereketin beşiği yapma vakti geldi!”',
+      caption: 'Bu çiftlik artık senin.',
       imageAssetPath: 'assets/images/story/panel6_deed.jpg',
-      featuredItemTag: 'KUZEY TARLASI TAPUSU & YÖNETİM İZNİ',
+      imageAlignment: Alignment(0.72, 0),
       accentColor: Color(0xFF15803D),
     ),
   ];
@@ -146,7 +105,6 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final panel = _panels[_currentIndex];
     final isLast = _currentIndex == _panels.length - 1;
 
     return Scaffold(
@@ -168,7 +126,7 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
             ),
 
             // Alt Navigasyon Barı
-            _buildBottomBar(panel, isLast),
+            _buildBottomBar(isLast),
           ],
         ),
       ),
@@ -176,505 +134,183 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
   }
 
   Widget _buildTopBar() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 520;
-        final title = Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2D3E2B),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0x66FFD166)),
-              ),
-              child: const Icon(
-                Icons.auto_stories_rounded,
-                size: 16,
-                color: Color(0xFFFFD166),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'AYLA USTA’NIN GÜNLÜĞÜ',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Color(0xFFFFFBEB),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ),
-          ],
-        );
-        final pageIndicator = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF182216),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0x44D8C99B)),
-          ),
-          child: Text(
-            '${_currentIndex + 1} / ${_panels.length}',
-            style: const TextStyle(
-              color: Color(0xFFFDE68A),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        );
-        final dismissButton = TextButton.icon(
-          onPressed: widget.onComplete,
-          icon: const Icon(
-            Icons.fast_forward_rounded,
-            size: 16,
-            color: Color(0xFFE2E8F0),
-          ),
-          label: const Text(
-            'Tarlaya Geç',
-            style: TextStyle(
-              color: Color(0xFFE2E8F0),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            backgroundColor: const Color(0xFF2C3E2A),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Color(0x55D8C99B)),
-            ),
-          ),
-        );
-
-        return Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: compact ? 10 : 12,
-          ),
-          decoration: const BoxDecoration(
-            color: Color(0xFF222F20),
-            border: Border(
-              bottom: BorderSide(color: Color(0x33D8C99B), width: 1.2),
-            ),
-          ),
-          child: compact
-              ? Column(
-                  children: [
-                    title,
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        pageIndicator,
-                        if (widget.canDismiss) ...[
-                          const SizedBox(width: 8),
-                          dismissButton,
-                        ],
-                      ],
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: title),
-                    pageIndicator,
-                    if (widget.canDismiss) ...[
-                      const SizedBox(width: 12),
-                      dismissButton,
-                    ],
-                  ],
-                ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStoryPage(ComicPanelData panel) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 820),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFFCFBF7), // Doğal sıcak parşömen
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x55000000),
-                  blurRadius: 20,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Başlık Çubuğu
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF233220),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: panel.accentColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          panel.chapterTitle,
-                          style: const TextStyle(
-                            color: Color(0xFFFFFBEB),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Çizgi Roman / Hikaye İllüstrasyonu (Asset)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.asset(
-                            panel.imageAssetPath,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  color: const Color(0xFF2A3A27),
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.image_outlined,
-                                      size: 48,
-                                      color: Color(0x66FFFFFF),
-                                    ),
-                                  ),
-                                ),
-                          ),
-
-                          // İtem Tanıtım Etiketi
-                          if (panel.featuredItemTag != null)
-                            Positioned(
-                              bottom: 12,
-                              left: 12,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xE61A2617),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: const Color(0x99FFD166),
-                                    width: 1.2,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x44000000),
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.stars_rounded,
-                                      size: 15,
-                                      color: Color(0xFFFFD166),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      panel.featuredItemTag!,
-                                      style: const TextStyle(
-                                        color: Color(0xFFFFFBEB),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Ekipman Bilgi Kartı (Eğer tanıtılan ekipman varsa)
-                if (panel.featuredEquipmentId != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: _buildEquipmentCard(panel.featuredEquipmentId!),
-                  ),
-
-                // Anlatıcı Parşömeni
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4EEDF),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFFE2D6C0),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.menu_book_rounded,
-                          size: 18,
-                          color: Color(0xFF8B6534),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            panel.narration,
-                            style: const TextStyle(
-                              color: Color(0xFF2C3E2D),
-                              fontSize: 13,
-                              fontStyle: FontStyle.italic,
-                              fontWeight: FontWeight.w600,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Ayla Usta Konuşma Alanı
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFAF7EE),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFFDCCDB2),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF334A2E),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                panel.speakerName,
-                                style: const TextStyle(
-                                  color: Color(0xFFFFD166),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                panel.speakerRole,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF6F7D6D),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          panel.dialogue,
-                          style: const TextStyle(
-                            color: Color(0xFF1B281B),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEquipmentCard(String equipmentId) {
-    final item = FarmEquipmentCatalog.byId(equipmentId);
-    if (item == null) return const SizedBox.shrink();
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEEF3EB),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFBFD2B9), width: 1.2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: const BoxDecoration(
+        color: Color(0xFF222F20),
+        border: Border(
+          bottom: BorderSide(color: Color(0x33D8C99B), width: 1.2),
+        ),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: const Color(0xFF283B25),
-              borderRadius: BorderRadius.circular(8),
+              color: const Color(0xFF2D3E2B),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0x66FFD166)),
             ),
-            child: Icon(
-              item.isTractor
-                  ? Icons.agriculture_rounded
-                  : item.operation == FarmOperation.prepare
-                  ? Icons.waves_rounded
-                  : item.operation == FarmOperation.sow
-                  ? Icons.grain_rounded
-                  : item.operation == FarmOperation.fertilize
-                  ? Icons.scatter_plot_rounded
-                  : Icons.cut_rounded,
-              color: const Color(0xFFFFD166),
-              size: 26,
+            child: const Icon(
+              Icons.auto_stories_rounded,
+              size: 18,
+              color: Color(0xFFFFD166),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        color: Color(0xFF1B281B),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2E7D32),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: const Text(
-                        'ENVANTERİNDE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  item.description,
-                  style: const TextStyle(
-                    color: Color(0xFF4A5D4A),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+          const SizedBox(width: 10),
+          const Text(
+            'MİRAS',
+            style: TextStyle(
+              color: Color(0xFFFFFBEB),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
             ),
           ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF182216),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0x44D8C99B)),
+            ),
+            child: Text(
+              '${_currentIndex + 1} / ${_panels.length}',
+              style: const TextStyle(
+                color: Color(0xFFFDE68A),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          if (widget.canDismiss) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: 'Atla',
+              onPressed: widget.onComplete,
+              icon: const Icon(Icons.fast_forward_rounded),
+              color: const Color(0xFFE2E8F0),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildBottomBar(ComicPanelData panel, bool isLast) {
+  Widget _buildStoryPage(ComicPanelData panel) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final aspectRatio = compact ? 1.18 : 1.55;
+        final stageWidth = math.min(
+          math.min(constraints.maxWidth - 32, 1080.0),
+          (constraints.maxHeight - 16) * aspectRatio,
+        );
+        final stageHeight = stageWidth / aspectRatio;
+
+        return Center(
+          child: SizedBox(
+            width: stageWidth,
+            height: stageHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: panel.accentColor, width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 22,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset(
+                      panel.imageAssetPath,
+                      key: ValueKey(panel.imageAssetPath),
+                      fit: BoxFit.cover,
+                      alignment: panel.imageAlignment,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const ColoredBox(
+                            color: Color(0xFF2A3A27),
+                            child: Center(
+                              child: Icon(
+                                Icons.image_outlined,
+                                size: 56,
+                                color: Color(0x99FFFFFF),
+                              ),
+                            ),
+                          ),
+                    ),
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0x16000000),
+                            Color(0x00000000),
+                            Color(0xD9000000),
+                          ],
+                          stops: [0, 0.46, 1],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: compact ? 16 : 28,
+                      right: compact ? 16 : 28,
+                      bottom: compact ? 18 : 28,
+                      child: Text(
+                        panel.caption,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 19 : 27,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                          shadows: const [
+                            Shadow(color: Color(0xAA000000), blurRadius: 8),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomBar(bool isLast) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: const BoxDecoration(
         color: Color(0xFF222F20),
         border: Border(top: BorderSide(color: Color(0x33D8C99B), width: 1.2)),
       ),
       child: Row(
         children: [
-          // Geri Butonu
           if (_currentIndex > 0)
-            ElevatedButton.icon(
+            IconButton(
+              tooltip: 'Önceki',
               onPressed: _prevPage,
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text('Önceki'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2C3E2A),
-                foregroundColor: const Color(0xFFF1F5F9),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: const BorderSide(color: Color(0x44D8C99B)),
-                ),
-              ),
+              icon: const Icon(Icons.arrow_back_rounded),
+              color: const Color(0xFFFFFBEB),
+              visualDensity: VisualDensity.compact,
             )
           else
-            const SizedBox.shrink(),
+            const SizedBox(width: 48),
 
           const Spacer(),
 
@@ -700,7 +336,6 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
 
           const Spacer(),
 
-          // İleri / Tarlaya Başla Butonu
           ElevatedButton.icon(
             onPressed: _nextPage,
             icon: Icon(
@@ -709,7 +344,7 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
               color: const Color(0xFF1B281B),
             ),
             label: Text(
-              isLast ? 'TARLAYA BAŞLA' : 'İleri',
+              isLast ? 'Başla' : 'Devam',
               style: const TextStyle(
                 color: Color(0xFF1B281B),
                 fontSize: 13,
@@ -721,7 +356,7 @@ class _StoryComicScreenState extends State<StoryComicScreen> {
               backgroundColor: isLast
                   ? const Color(0xFF81C784)
                   : const Color(0xFFFFD166),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               elevation: 3,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),

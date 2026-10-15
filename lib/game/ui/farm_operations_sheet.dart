@@ -440,7 +440,7 @@ class _CompostPanel extends StatelessWidget {
     final facility = session.compostFacility;
     final transferableBales = math
         .min(
-          session.state.groundBaleCount,
+          session.compostableGrassBaleCount,
           facility.remainingBiomassCapacity ~/ 25,
         )
         .toInt();
@@ -462,7 +462,7 @@ class _CompostPanel extends StatelessWidget {
             Expanded(
               child: _MetricCard(
                 label: 'OT BALYASI',
-                value: '${session.state.groundBaleCount}',
+                value: '${session.compostableGrassBaleCount}',
                 icon: Icons.grass_rounded,
               ),
             ),

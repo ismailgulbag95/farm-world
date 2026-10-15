@@ -890,6 +890,15 @@ class OpeningSession {
     ];
   }
 
+  int get _reservedHarvestWarehouseCapacity => plots
+      .where((plot) => plot.activeJob?.operation == FarmOperation.harvest)
+      .fold(0, (total, plot) => total + plot.activeJob!.outputQuantity);
+
+  int get _unreservedWarehouseCapacity => max(
+    0,
+    fleetManager.remainingWarehouseCapacity - _reservedHarvestWarehouseCapacity,
+  );
+
   FarmTutorialStep get tutorialStep => _state.farmTutorialStep;
 
   bool get isFarmTutorialComplete =>
@@ -1421,6 +1430,16 @@ class OpeningSession {
 
   int get groundBaleCount => _state.groundBaleCount;
   int get groundBales => _state.groundBaleCount;
+  int get compostableGrassBaleCount =>
+      _state.groundBaleCount +
+      plots
+          .where(
+            (plot) =>
+                plot.isOwned &&
+                plot.use == CropPlotUse.pasture &&
+                plot.readyGrassBales > 0,
+          )
+          .fold<int>(0, (total, plot) => total + plot.readyGrassBales);
   bool get hasGroundBale => _state.hasGroundBale;
 
   double get mowingProgressSeconds => _state.mowingProgressSeconds;
@@ -1829,13 +1848,13 @@ class OpeningSession {
       stage: unlocksMower && _state.stage == OpeningStage.scythe
           ? OpeningStage.mower
           : (unlocksWorker && _state.stage != OpeningStage.management
-              ? OpeningStage.management
-              : _state.stage),
+                ? OpeningStage.management
+                : _state.stage),
       hasWorker: unlocksWorker ? true : _state.hasWorker,
-      isMowerAssignedToWorker:
-          unlocksWorker ? true : _state.isMowerAssignedToWorker,
-      hasOwnedInitialPlot:
-          unlocksWorker ? true : _state.hasOwnedInitialPlot,
+      isMowerAssignedToWorker: unlocksWorker
+          ? true
+          : _state.isMowerAssignedToWorker,
+      hasOwnedInitialPlot: unlocksWorker ? true : _state.hasOwnedInitialPlot,
       freeInitialSeedsCount: unlocksWorker
           ? max(_state.freeInitialSeedsCount, 1)
           : _state.freeInitialSeedsCount,
@@ -1844,7 +1863,8 @@ class OpeningSession {
     if (unlocksWorker) {
       grantStarterEquipmentOnce();
     }
-    if (technologyId == soilCareTechnologyId && _state.automaticSoilCareEnabled) {
+    if (technologyId == soilCareTechnologyId &&
+        _state.automaticSoilCareEnabled) {
       _tryAutomaticSoilCare();
     }
   }
@@ -3063,6 +3083,7 @@ class OpeningSession {
         plot.hasActiveCrop ||
         plot.hasActiveJob ||
         !plot.isCultivated ||
+        (plotId != starterPlotId && !hasResearch('T01')) ||
         !_cropTechnologyAvailable(cropId) ||
         !canUseEquippedEquipmentFor(FarmOperation.sow) ||
         !_tutorialAllows(FarmOperation.sow, plotId)) {
@@ -3134,11 +3155,9 @@ class OpeningSession {
         !_tutorialAllows(FarmOperation.harvest, plotId)) {
       return false;
     }
-    final reservedCapacity = plots
-        .where((item) => item.activeJob?.operation == FarmOperation.harvest)
-        .fold<int>(0, (total, item) => total + item.activeJob!.outputQuantity);
     return fleetManager.remainingWarehouseCapacity >=
-        reservedCapacity + harvestOutputQuantityForPlot(plotId, now);
+        _reservedHarvestWarehouseCapacity +
+            harvestOutputQuantityForPlot(plotId, now);
   }
 
   bool harvestCropOnPlot(int plotId, DateTime now) {
@@ -3417,6 +3436,7 @@ class OpeningSession {
     var contractCompleted = false;
     final earned = fleetManager.update(
       dtSeconds,
+      reservedWarehouseCapacity: _reservedHarvestWarehouseCapacity,
       unitPriceProvider: (itemId) =>
           activeMarket.getQuote(itemId, seasonAt(nowUtc)).currentPrice,
       onMarketDelivery:
@@ -3482,6 +3502,7 @@ class OpeningSession {
     required String fieldName,
     String? productId,
     int? amountPerTrip,
+    String? vehicleId,
     bool repeatRoute = false,
   }) {
     if (_state.stage != OpeningStage.management || !_state.hasStarterTruck) {
@@ -3497,23 +3518,37 @@ class OpeningSession {
         productId != activeContract.itemId) {
       return false;
     }
-    if (amountPerTrip != null &&
-        (amountPerTrip <= 0 || amountPerTrip > TruckType.starter.capacity)) {
-      return false;
-    }
     fleetManager.initializeStarterFleet();
     final targetCropId = activeContract?.itemId ?? productId;
-    final starterVehicle = fleetManager.vehicles.where(
-      (vehicle) => vehicle.truckType == TruckType.starter,
+    final defaultVehicleIndex = vehicleId == null
+        ? fleetManager.vehicles.indexWhere(
+            (vehicle) => vehicle.truckType == TruckType.starter,
+          )
+        : -1;
+    final requestedVehicleId =
+        vehicleId ??
+        (defaultVehicleIndex < 0
+            ? null
+            : fleetManager.vehicles[defaultVehicleIndex].id);
+    if (requestedVehicleId == null) return false;
+    final vehicleIndex = fleetManager.vehicles.indexWhere(
+      (vehicle) => vehicle.id == requestedVehicleId,
     );
+    if (vehicleIndex < 0) return false;
+    final selectedVehicle = fleetManager.vehicles[vehicleIndex];
     if (fleetManager.totalWarehouseAmount <= 0 ||
         (targetCropId != null && warehouseAmountFor(targetCropId) <= 0) ||
         (productId != null && warehouseAmountFor(productId) <= 0) ||
-        starterVehicle.isEmpty ||
-        (starterVehicle.first.assignedRouteId != null &&
-            starterVehicle.first.assignedRouteId != 'route_starter') ||
-        starterVehicle.first.fuelLevel <= 0.01 ||
-        starterVehicle.first.wearPercent >= 100) {
+        (selectedVehicle.assignedRouteId != null &&
+            selectedVehicle.assignedRouteId != 'route_starter') ||
+        (selectedVehicle.status != VehicleStatus.idle &&
+            selectedVehicle.status != VehicleStatus.paused) ||
+        selectedVehicle.hasCargo ||
+        selectedVehicle.fuelLevel <= 0.01 ||
+        selectedVehicle.wearPercent >= 100 ||
+        (amountPerTrip != null &&
+            (amountPerTrip <= 0 ||
+                amountPerTrip > selectedVehicle.effectiveCapacity))) {
       return false;
     }
     fleetManager.startStarterMarketRoute(
@@ -3524,6 +3559,7 @@ class OpeningSession {
       loadAmountLimit: amountPerTrip,
       isOneShot: !repeatRoute,
       contractId: activeContract?.id,
+      vehicleId: selectedVehicle.id,
     );
     if (_state.farmTutorialStep == FarmTutorialStep.deliveryRoute) {
       _state = _state.copyWith(farmTutorialStep: FarmTutorialStep.delivery);
@@ -3635,9 +3671,11 @@ class OpeningSession {
       facility.update(dtSeconds, eligibleRecipeIds: eligibleRecipeIds.toSet());
       var transferred = false;
       for (final lot in [...facility.outputBuffer]) {
+        final available = _unreservedWarehouseCapacity;
+        if (available <= 0) break;
         final stored = fleetManager.depositToWarehouse(
           lot.itemId,
-          lot.amount,
+          min(lot.amount, available),
           ageMinutes: lot.ageMinutes,
           quality: lot.quality,
         );
@@ -3676,7 +3714,7 @@ class OpeningSession {
       var progress =
           (_buildingProductionProgress[building.parcelId] ?? 0) + dtSeconds;
       while (progress >= product.seconds &&
-          fleetManager.remainingWarehouseCapacity > 0) {
+          _unreservedWarehouseCapacity >= product.amount) {
         final stored = fleetManager.depositToWarehouse(
           product.itemId,
           product.amount,
@@ -3720,10 +3758,7 @@ class OpeningSession {
         }
       }
       coop.update(dtSeconds);
-      final storeCount = min(
-        coop.eggStock,
-        fleetManager.remainingWarehouseCapacity,
-      );
+      final storeCount = min(coop.eggStock, _unreservedWarehouseCapacity);
       if (storeCount > 0) {
         final eggs = coop.takeEggs(storeCount);
         fleetManager.depositToWarehouse('fresh_eggs', eggs);
@@ -3766,19 +3801,13 @@ class OpeningSession {
         compostFacility.addManure(manureProduced);
       }
 
-      final milkStore = min(
-        pasture.milkStock,
-        fleetManager.remainingWarehouseCapacity,
-      );
+      final milkStore = min(pasture.milkStock, _unreservedWarehouseCapacity);
       if (milkStore > 0) {
         pasture.milkStock -= milkStore;
         fleetManager.depositToWarehouse('fresh_milk', milkStore);
       }
 
-      final woolStore = min(
-        pasture.woolStock,
-        fleetManager.remainingWarehouseCapacity,
-      );
+      final woolStore = min(pasture.woolStock, _unreservedWarehouseCapacity);
       if (woolStore > 0) {
         pasture.woolStock -= woolStore;
         fleetManager.depositToWarehouse('wool_bale', woolStore);
@@ -3886,14 +3915,36 @@ class OpeningSession {
   // Madde 6: Gübreleme ve Kompost Üretimi
   // ---------------------------------------------------------------------------
   bool addGrassToCompost(int baleCount) {
-    if (baleCount <= 0 || _state.groundBaleCount < baleCount) return false;
-    final success = compostFacility.addGrassBales(baleCount);
-    if (success) {
-      _state = _state.copyWith(
-        groundBaleCount: _state.groundBaleCount - baleCount,
-      );
+    if (baleCount <= 0 ||
+        compostableGrassBaleCount < baleCount ||
+        compostFacility.remainingBiomassCapacity < baleCount * 25) {
+      return false;
     }
-    return success;
+    final success = compostFacility.addGrassBales(baleCount);
+    if (!success) return false;
+
+    var remainingBales = baleCount;
+    final usedGroundBales = min(_state.groundBaleCount, remainingBales);
+    remainingBales -= usedGroundBales;
+    final updatedPlots = List<CropPlotState>.from(plots);
+    if (remainingBales > 0) {
+      for (var index = 0; index < updatedPlots.length; index++) {
+        final plot = updatedPlots[index];
+        if (!plot.isOwned || plot.use != CropPlotUse.pasture) continue;
+        final transferred = min(plot.readyGrassBales, remainingBales);
+        if (transferred <= 0) continue;
+        updatedPlots[index] = plot.copyWith(
+          readyGrassBales: plot.readyGrassBales - transferred,
+        );
+        remainingBales -= transferred;
+        if (remainingBales == 0) break;
+      }
+    }
+    _state = _state.copyWith(
+      groundBaleCount: _state.groundBaleCount - usedGroundBales,
+      plots: updatedPlots,
+    );
+    return true;
   }
 
   bool applyOrganicCompost(int plotId) {

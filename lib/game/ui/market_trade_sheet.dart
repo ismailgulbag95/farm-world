@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -400,6 +401,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
     }
 
     final availableItemIds = stockItems.map((b) => b.cropId).toSet().toList();
+    final hasResearchL01 = session.hasResearch('L01');
+    if (!hasResearchL01) {
+      _selectedDispatchItemId = stockItems.first.cropId;
+    }
     if (_selectedDispatchItemId == null || !availableItemIds.contains(_selectedDispatchItemId)) {
       _selectedDispatchItemId = availableItemIds.first;
     }
@@ -412,7 +417,21 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
       _selectedVehicleId = vehicles.first.id;
     }
 
-    final estimatedEarnings = _dispatchAmount * quote.currentPrice;
+    FleetVehicleState? selectedVehicle;
+    for (final vehicle in vehicles) {
+      if (vehicle.id == _selectedVehicleId) {
+        selectedVehicle = vehicle;
+        break;
+      }
+    }
+    final maxDispatchAmount = min(
+      currentItemStock,
+      selectedVehicle?.effectiveCapacity ?? 0,
+    );
+    final dispatchAmount = maxDispatchAmount <= 0
+        ? 0
+        : _dispatchAmount.clamp(1, maxDispatchAmount).toInt();
+    final estimatedEarnings = dispatchAmount * quote.currentPrice;
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -459,20 +478,33 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   ),
                 );
               }).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _selectedDispatchItemId = val;
-                    final maxStock = session.warehouseAmountFor(val);
-                    if (_dispatchAmount > maxStock) _dispatchAmount = maxStock;
-                  });
-                }
-              },
+              onChanged: hasResearchL01
+                  ? (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedDispatchItemId = val;
+                          final maxStock = session.warehouseAmountFor(val);
+                          final capacity = selectedVehicle?.effectiveCapacity ?? 0;
+                          _dispatchAmount = _dispatchAmount
+                              .clamp(1, max(1, min(maxStock, capacity)))
+                              .toInt();
+                        });
+                      }
+                    }
+                  : null,
             ),
           ),
         ),
 
         const SizedBox(height: 18),
+        if (!hasResearchL01)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Ürün ve miktar seçimi L01 araştırmasıyla açılır. Şimdilik seçili araç ambarın ilk ürününü kapasitesi kadar yükler.',
+              style: TextStyle(color: Color(0xFF6B7A6A), fontSize: 12),
+            ),
+          ),
 
         // Miktar Belirleme
         Row(
@@ -488,7 +520,7 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
               ),
             ),
             Text(
-              '$_dispatchAmount / $currentItemStock birim',
+              '$dispatchAmount / $currentItemStock birim',
               style: const TextStyle(
                 color: _marketGreen,
                 fontWeight: FontWeight.w800,
@@ -505,15 +537,17 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             thumbColor: _marketGold,
           ),
           child: Slider(
-            value: _dispatchAmount.toDouble().clamp(1.0, currentItemStock.toDouble()),
+            value: dispatchAmount <= 0 ? 1 : dispatchAmount.toDouble(),
             min: 1.0,
-            max: currentItemStock.toDouble() > 1.0 ? currentItemStock.toDouble() : 2.0,
-            divisions: currentItemStock > 1 ? currentItemStock : 1,
-            onChanged: (v) {
-              setState(() {
-                _dispatchAmount = v.round();
-              });
-            },
+            max: maxDispatchAmount > 1 ? maxDispatchAmount.toDouble() : 2.0,
+            divisions: maxDispatchAmount > 1 ? maxDispatchAmount : 1,
+            onChanged: !hasResearchL01 || maxDispatchAmount <= 0
+                ? null
+                : (v) {
+                    setState(() {
+                      _dispatchAmount = v.round();
+                    });
+                  },
           ),
         ),
 
@@ -536,6 +570,12 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             onTap: () {
               setState(() {
                 _selectedVehicleId = vehicle.id;
+                final stock = session.warehouseAmountFor(
+                  _selectedDispatchItemId!,
+                );
+                _dispatchAmount = _dispatchAmount
+                    .clamp(1, max(1, min(stock, vehicle.effectiveCapacity)))
+                    .toInt();
               });
             },
             child: Card(
@@ -649,9 +689,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                 fieldX: starterPlot?.positionX.toDouble() ?? 0,
                 fieldY: starterPlot?.positionY.toDouble() ?? 0,
                 fieldName: 'Merkez Depo',
+                vehicleId: _selectedVehicleId,
                 productId: hasResearchL01 ? _selectedDispatchItemId : null,
                 amountPerTrip: hasResearchL01
-                    ? _dispatchAmount.clamp(1, TruckType.starter.capacity)
+                    ? dispatchAmount
                     : null,
               );
 
@@ -661,7 +702,7 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   SnackBar(
                     backgroundColor: _marketGreen,
                     content: Text(
-                      '🚚 Sevkiyat başladı: $_dispatchAmount birim ${FarmItemCatalog.nameFor(_selectedDispatchItemId!)} kasaba pazarına yola çıktı!',
+                      '🚚 Sevkiyat başladı: ${hasResearchL01 ? dispatchAmount : min(currentItemStock, selectedVehicle?.effectiveCapacity ?? 0)} birim ${FarmItemCatalog.nameFor(_selectedDispatchItemId!)} kasaba pazarına yola çıktı!',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),

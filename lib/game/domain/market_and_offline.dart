@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'farm_equipment.dart';
 import 'farm_calendar.dart';
 import 'opening_session.dart';
 import 'market_price_simulator.dart';
@@ -10,6 +11,7 @@ export 'market_price_simulator.dart';
 class OfflineProgressReport {
   const OfflineProgressReport({
     required this.elapsedDuration,
+    required this.simulatedDuration,
     required this.startingSeason,
     required this.endingSeason,
     required this.harvestedCropsCount,
@@ -19,6 +21,7 @@ class OfflineProgressReport {
   });
 
   final Duration elapsedDuration;
+  final Duration simulatedDuration;
   final Season startingSeason;
   final Season endingSeason;
   final int harvestedCropsCount;
@@ -27,7 +30,9 @@ class OfflineProgressReport {
   final int earnedCredits;
 
   String get summaryText =>
-      'Çevrimdışı İlerleme (${elapsedDuration.inMinutes} dk):\n'
+      'Çevrimdışı İlerleme\n'
+      'Simüle edilen süre: ${simulatedDuration.inMinutes} dk'
+      '${simulatedDuration < elapsedDuration ? ' / toplam ${elapsedDuration.inMinutes} dk çevrimdışı' : ''}\n'
       '• Mevsim: ${startingSeason.name.toUpperCase()} ➔ ${endingSeason.name.toUpperCase()}\n'
       '• Hasat Edilen Ürünler: $harvestedCropsCount adet\n'
       '• İşlenen Mamuller: $processedGoodsCount birim\n'
@@ -48,7 +53,8 @@ class OfflineProgressSimulator {
     if (offlineDuration <= Duration.zero ||
         session.stage != OpeningStage.management) {
       return OfflineProgressReport(
-        elapsedDuration: Duration.zero,
+        elapsedDuration: offlineDuration,
+        simulatedDuration: Duration.zero,
         startingSeason: Season.spring,
         endingSeason: Season.spring,
         harvestedCropsCount: 0,
@@ -95,6 +101,23 @@ class OfflineProgressSimulator {
       accumulated += dt;
       simTime = simTime.add(Duration(seconds: dt.toInt()));
 
+      // Resolve completed field operations before producers claim free space.
+      final dueHarvestPlotIds = session.plots
+          .where(
+            (plot) =>
+                plot.activeJob?.operation == FarmOperation.harvest &&
+                !simTime.isBefore(plot.activeJob!.completesAt),
+          )
+          .map((plot) => plot.id)
+          .toSet();
+      session.advanceFarmOperations(simTime);
+      harvestedCount += dueHarvestPlotIds.where((plotId) {
+        final plot = session.plotById(plotId);
+        return plot != null &&
+            plot.activeJob == null &&
+            plot.hasHarvestedActiveCrop;
+      }).length;
+
       // 1. Advance logistics transport
       session.advanceLogistics(dt, now: simTime, marketOverride: marketSim);
 
@@ -111,19 +134,18 @@ class OfflineProgressSimulator {
       processedCount += currentOutput - previousOutput;
       session.advanceLivestock(dt, now: simTime);
       session.advanceBuildingOperatingCosts(simTime);
-      session.advanceFarmOperations(simTime);
 
       // 3. Harvest ripe plots if ready and re-plant
       for (final plot in session.plots) {
         if (!plot.isOwned) continue;
-        if (plot.hasActiveCrop && session.harvestCropOnPlot(plot.id, simTime)) {
-          harvestedCount++;
-          // Re-plant immediately
-          session.plantCropOnPlot(
-            plot.id,
-            OpeningSession.starterWheatId,
-            simTime,
-          );
+        if (plot.hasActiveCrop) {
+          session.harvestCropOnPlot(plot.id, simTime);
+        } else if (plot.hasHarvestedActiveCrop && !plot.hasActiveJob) {
+          if (!plot.isCultivated) {
+            session.cultivatePlot(plot.id, simTime);
+          } else if (plot.activeCropId != null) {
+            session.plantCropOnPlot(plot.id, plot.activeCropId!, simTime);
+          }
         }
       }
     }
@@ -142,6 +164,7 @@ class OfflineProgressSimulator {
 
     return OfflineProgressReport(
       elapsedDuration: offlineDuration,
+      simulatedDuration: simulationDuration,
       startingSeason: startingSeason,
       endingSeason: endingSeason,
       harvestedCropsCount: harvestedCount,

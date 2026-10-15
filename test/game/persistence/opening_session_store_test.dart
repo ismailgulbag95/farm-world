@@ -132,6 +132,38 @@ void main() {
   });
 
   group('OpeningSessionStore - Recovery & No-Overwrite Protections', () {
+    test('restores a verified backup and preserves it during the first save', () async {
+      await store.save(const OpeningSessionState(farmCredits: 30));
+      await store.save(const OpeningSessionState(farmCredits: 90));
+      final saveFile = File('${tempDir.path}/${store.fileName}');
+      final backupFile = File('${tempDir.path}/${store.backupFileName}');
+      const corruptContent = '{broken save';
+      await saveFile.writeAsString(corruptContent);
+
+      final loadResult = await store.load();
+
+      expect(loadResult.status, SaveRecoveryStatus.recoveredFromBackup);
+      expect(loadResult.canSave, isTrue);
+      expect(loadResult.session.farmCredits, 30);
+
+      final saveResult = await store.save(
+        const OpeningSessionState(farmCredits: 120),
+      );
+
+      expect(saveResult.isSuccess, isTrue);
+      expect(await File('${saveFile.path}.corrupt').readAsString(), corruptContent);
+      final backupJson = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      expect(
+        OpeningSessionState.fromJson(backupJson['data'] as Map<String, dynamic>).farmCredits,
+        30,
+      );
+      final activeJson = jsonDecode(await saveFile.readAsString()) as Map<String, dynamic>;
+      expect(
+        OpeningSessionState.fromJson(activeJson['data'] as Map<String, dynamic>).farmCredits,
+        120,
+      );
+    });
+
     test('preserves corrupt file, disables writes, and provides diagnostic log', () async {
       final saveFile = File('${tempDir.path}/${store.fileName}');
       const corruptContent = '{"version": 1, "data": {broken_json...';

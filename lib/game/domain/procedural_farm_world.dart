@@ -492,7 +492,9 @@ class ProceduralFarmWorld {
   static const int clusteredMountainGenerationVersion = 3;
   static const int geographicRedesignGenerationVersion = 4;
   static const int collisionSafeGenerationVersion = 5;
-  static const int currentGenerationVersion = collisionSafeGenerationVersion;
+  static const int parcelBoundarySafeGenerationVersion = 6;
+  static const int currentGenerationVersion =
+      parcelBoundarySafeGenerationVersion;
   static const double _lakeFieldBankBufferMeters = 180;
   static const double _lakeRoadBankBufferMeters = 180;
   static const double _pondFieldBankBufferMeters = 110;
@@ -1156,8 +1158,11 @@ class ProceduralFarmWorld {
   final Set<String> _preservedParcelIds;
   final Map<String, WorldMapChunk> _chunkCache = {};
   final Map<String, List<WorldMapParcel>> _districtParcelCache = {};
+  final Map<String, List<WorldMapParcel>> _rawDistrictParcelCache = {};
   final Map<String, List<WorldMapRoad>> _roadCache = {};
   final Map<String, List<WorldMapMountain>> _mountainCache = {};
+  final Map<String, WorldMapPointOfInterest?> _pointOfInterestPlacementCache =
+      {};
   final Map<String, WorldMapPoint> _settlementPositionCache = {};
   final Map<String, WorldMapPoint> _districtHubCache = {};
   final Set<String> _unavailableSettlementKeys = {};
@@ -1176,7 +1181,8 @@ class ProceduralFarmWorld {
           seed: seed,
           generationVersion: version,
           legacyGenerationVersion: version,
-          preserveHistoricalParcelGeometry: true,
+          preserveHistoricalParcelGeometry:
+              version < geographicRedesignGenerationVersion,
         ),
       );
 
@@ -1494,7 +1500,32 @@ class ProceduralFarmWorld {
     final key = '$districtX:$districtY';
     final cached = _districtParcelCache[key];
     if (cached != null) return cached;
-    if (_districtParcelCache.length > 128) _districtParcelCache.clear();
+    if (_districtParcelCache.length > 128) {
+      _districtParcelCache.clear();
+      _rawDistrictParcelCache.clear();
+    }
+
+    if (generationVersion >= parcelBoundarySafeGenerationVersion) {
+      final candidates = _rawRedesignedParcelsForDistrict(districtX, districtY);
+      final neighboringParcels = [
+        for (var y = districtY - 1; y <= districtY + 1; y++)
+          for (var x = districtX - 1; x <= districtX + 1; x++)
+            if (x != districtX || y != districtY)
+              if (_parcelDistrictIsVisible(x, y))
+                ..._rawRedesignedParcelsForDistrict(x, y),
+      ];
+      final parcels = List<WorldMapParcel>.unmodifiable([
+        for (final candidate in candidates)
+          if (!neighboringParcels.any(
+            (neighbor) =>
+                _parcelConflicts(candidate, [neighbor]) &&
+                _winsParcelBoundaryConflict(neighbor, candidate),
+          ))
+            candidate,
+      ]);
+      _districtParcelCache[key] = parcels;
+      return parcels;
+    }
 
     if (generationVersion >= geographicRedesignGenerationVersion) {
       final parcels = _redesignedParcelsForDistrict(districtX, districtY);
@@ -1621,6 +1652,36 @@ class ProceduralFarmWorld {
     final result = List<WorldMapParcel>.unmodifiable(accepted);
     _districtParcelCache[key] = result;
     return result;
+  }
+
+  List<WorldMapParcel> _rawRedesignedParcelsForDistrict(
+    int districtX,
+    int districtY,
+  ) {
+    final key = '$districtX:$districtY';
+    return _rawDistrictParcelCache.putIfAbsent(
+      key,
+      () => _redesignedParcelsForDistrict(districtX, districtY),
+    );
+  }
+
+  bool _parcelDistrictIsVisible(int districtX, int districtY) {
+    final minimumX = _parcelDistrictIndex(
+      (minChunkX + 0.5) * farmWorldChunkSize,
+    );
+    final maximumX = _parcelDistrictIndex(
+      (maxChunkX + 0.5) * farmWorldChunkSize,
+    );
+    final minimumY = _parcelDistrictIndex(
+      (minChunkY + 0.5) * farmWorldChunkSize,
+    );
+    final maximumY = _parcelDistrictIndex(
+      (maxChunkY + 0.5) * farmWorldChunkSize,
+    );
+    return districtX >= minimumX &&
+        districtX <= maximumX &&
+        districtY >= minimumY &&
+        districtY <= maximumY;
   }
 
   List<WorldMapParcel> _redesignedParcelsForDistrict(
@@ -1862,6 +1923,20 @@ class ProceduralFarmWorld {
           (candidate.center.y - parcel.center.y).abs() <
               (candidate.height + parcel.height) / 2 + clearance,
     );
+  }
+
+  bool _winsParcelBoundaryConflict(
+    WorldMapParcel first,
+    WorldMapParcel second,
+  ) {
+    final firstPriority = _stableHash(
+      '$seed|parcel-boundary-priority|${first.id}',
+    );
+    final secondPriority = _stableHash(
+      '$seed|parcel-boundary-priority|${second.id}',
+    );
+    if (firstPriority != secondPriority) return firstPriority < secondPriority;
+    return first.id.compareTo(second.id) < 0;
   }
 
   bool _hasFeatureClearance(WorldMapParcel parcel) {
@@ -2536,12 +2611,40 @@ class ProceduralFarmWorld {
     int chunkX,
     int chunkY,
   ) {
+    final point = _pointOfInterestPlacementForChunk(chunkX, chunkY);
+    if (point == null) return const [];
+    if (generationVersion >= collisionSafeGenerationVersion) {
+      for (var y = chunkY - 1; y <= chunkY + 1; y++) {
+        for (var x = chunkX - 1; x <= chunkX + 1; x++) {
+          if (x == chunkX && y == chunkY) continue;
+          final neighbor = _pointOfInterestPlacementForChunk(x, y);
+          if (neighbor == null || !_pointOfInterestsOverlap(point, neighbor)) {
+            continue;
+          }
+          if (!_pointOfInterestChunkHasPriority(chunkX, chunkY, x, y)) {
+            return const [];
+          }
+        }
+      }
+    }
+    return [point];
+  }
+
+  WorldMapPointOfInterest? _pointOfInterestPlacementForChunk(
+    int chunkX,
+    int chunkY,
+  ) {
+    final cacheKey = '$chunkX:$chunkY';
+    if (_pointOfInterestPlacementCache.containsKey(cacheKey)) {
+      return _pointOfInterestPlacementCache[cacheKey];
+    }
     final random = Random(_stableHash('$seed|poi|$chunkX|$chunkY'));
     if (random.nextInt(
           generationVersion >= geographicRedesignGenerationVersion ? 8 : 5,
         ) !=
         0) {
-      return const [];
+      _pointOfInterestPlacementCache[cacheKey] = null;
+      return null;
     }
     final type = generationVersion >= geographicRedesignGenerationVersion
         ? const [
@@ -2552,27 +2655,140 @@ class ProceduralFarmWorld {
         : WorldPointOfInterestType.values[random.nextInt(
             WorldPointOfInterestType.values.length,
           )];
-    final generatedPosition = WorldMapPoint(
-      chunkX * farmWorldChunkSize + 140 + random.nextDouble() * 360,
-      chunkY * farmWorldChunkSize + 140 + random.nextDouble() * 360,
-    );
-    final roadPosition =
-        generationVersion >= geographicRedesignGenerationVersion
-        ? _nearestRoadPosition(generatedPosition, maxDistance: 280)
-        : null;
-    if (generationVersion >= geographicRedesignGenerationVersion &&
-        roadPosition == null) {
-      return const [];
-    }
-    final position = roadPosition ?? generatedPosition;
-    return [
-      WorldMapPointOfInterest(
+    final attempts = generationVersion >= collisionSafeGenerationVersion
+        ? 12
+        : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      final generatedPosition = WorldMapPoint(
+        chunkX * farmWorldChunkSize + 140 + random.nextDouble() * 360,
+        chunkY * farmWorldChunkSize + 140 + random.nextDouble() * 360,
+      );
+      final roadPosition =
+          generationVersion >= geographicRedesignGenerationVersion
+          ? _nearestRoadPosition(generatedPosition, maxDistance: 280)
+          : null;
+      if (generationVersion >= geographicRedesignGenerationVersion &&
+          roadPosition == null) {
+        continue;
+      }
+      final position = roadPosition ?? generatedPosition;
+      if (generationVersion >= collisionSafeGenerationVersion &&
+          _pointOfInterestConflicts(position, type)) {
+        continue;
+      }
+      final point = WorldMapPointOfInterest(
         id: 'poi:$chunkX:$chunkY',
         name: _poiName(type),
         type: type,
         position: position,
-      ),
-    ];
+      );
+      _pointOfInterestPlacementCache[cacheKey] = point;
+      return point;
+    }
+    _pointOfInterestPlacementCache[cacheKey] = null;
+    return null;
+  }
+
+  bool _pointOfInterestsOverlap(
+    WorldMapPointOfInterest left,
+    WorldMapPointOfInterest right,
+  ) =>
+      left.position.distanceTo(right.position) <
+      _pointOfInterestFootprint(left.type) +
+          _pointOfInterestFootprint(right.type) +
+          36;
+
+  bool _pointOfInterestChunkHasPriority(
+    int chunkX,
+    int chunkY,
+    int otherChunkX,
+    int otherChunkY,
+  ) {
+    final priority = _stableHash('$seed|poi-priority|$chunkX|$chunkY');
+    final otherPriority = _stableHash(
+      '$seed|poi-priority|$otherChunkX|$otherChunkY',
+    );
+    if (priority != otherPriority) return priority < otherPriority;
+    if (chunkX != otherChunkX) return chunkX < otherChunkX;
+    return chunkY < otherChunkY;
+  }
+
+  double _pointOfInterestFootprint(WorldPointOfInterestType type) =>
+      switch (type) {
+        WorldPointOfInterestType.water => 58,
+        WorldPointOfInterestType.village => 108,
+        WorldPointOfInterestType.mill => 78,
+        WorldPointOfInterestType.timberYard => 88,
+      };
+
+  bool _pointOfInterestConflicts(
+    WorldMapPoint position,
+    WorldPointOfInterestType type,
+  ) {
+    final footprint = _pointOfInterestFootprint(type);
+    final bounds = Rect.fromCircle(
+      center: Offset(position.x, position.y),
+      radius: footprint + 40,
+    );
+    if (_protectedOwnedParcels.any(
+      (parcel) => _parcelIntersectsCircle(parcel, position, footprint + 32),
+    )) {
+      return true;
+    }
+    if (_settlementFootprintsWithin(bounds.inflate(260)).any(
+      (settlement) =>
+          position.distanceTo(settlement.$1) < footprint + settlement.$2 + 36,
+    )) {
+      return true;
+    }
+    for (final lake in lakes) {
+      if (lake.bounds
+          .inflate(footprint + 24)
+          .contains(Offset(position.x, position.y))) {
+        return true;
+      }
+    }
+    if (_treeOverlapsWatercourse(position, footprint, watercourses)) {
+      return true;
+    }
+    final chunkX = (position.x / farmWorldChunkSize).floor();
+    final chunkY = (position.y / farmWorldChunkSize).floor();
+    for (var y = chunkY - 1; y <= chunkY + 1; y++) {
+      for (var x = chunkX - 1; x <= chunkX + 1; x++) {
+        if (_pondsForChunk(x, y).any(
+          (pond) => _pointWithinEllipse(
+            position,
+            pond.center,
+            pond.width / 2 + footprint + 24,
+            pond.height / 2 + footprint + 24,
+          ),
+        )) {
+          return true;
+        }
+        if (_mountainsForChunk(x, y).any(
+          (mountain) => _pointWithinEllipse(
+            position,
+            mountain.center,
+            mountain.width / 2 + footprint + 20,
+            mountain.height / 2 + footprint + 20,
+          ),
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool _pointWithinEllipse(
+    WorldMapPoint point,
+    WorldMapPoint center,
+    double radiusX,
+    double radiusY,
+  ) {
+    final x = (point.x - center.x) / radiusX;
+    final y = (point.y - center.y) / radiusY;
+    return x * x + y * y <= 1;
   }
 
   List<WorldMapRoad> roadSegmentsInBounds(

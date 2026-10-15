@@ -1,4 +1,5 @@
 import 'package:farm_world/game/domain/market_price_simulator.dart';
+import 'package:farm_world/game/domain/logistics_fleet.dart';
 import 'package:farm_world/game/domain/opening_session.dart';
 import 'package:farm_world/game/domain/farm_calendar.dart';
 import 'package:farm_world/game/ui/market_trade_sheet.dart';
@@ -47,6 +48,31 @@ void main() {
       // Tırın rota üzerinde ilerlediğini doğrula
       final afterVehicle = session.fleetManager.vehicles.first;
       expect(afterVehicle.fuelLevel, lessThanOrEqualTo(100.0));
+    });
+
+    test('Market dispatch uses the selected truck and loads the chosen amount', () {
+      final session = OpeningSession();
+      session.skipToManagement(minimumCredits: 5000);
+      session.unlockTechnology('L01');
+      session.fleetManager.initializeStarterFleet();
+      session.fleetManager.purchaseTruck(TruckType.heavyHauler);
+      session.fleetManager.depositToWarehouse('wheat', 100);
+      final heavyTruck = session.fleetManager.vehicles.last;
+
+      final started = session.startStarterMarketRoute(
+        fieldX: 0,
+        fieldY: 0,
+        fieldName: 'Merkez Depo',
+        productId: 'wheat',
+        amountPerTrip: 50,
+        vehicleId: heavyTruck.id,
+      );
+
+      expect(started, isTrue);
+      expect(session.fleetManager.vehicles.first.hasCargo, isFalse);
+      expect(session.fleetManager.vehicles.last.cargoAmount, 50);
+      expect(session.fleetManager.vehicles.last.assignedRouteId, 'route_market_${heavyTruck.id}');
+      expect(session.warehouseAmountFor('wheat'), 50);
     });
 
     test('Delivery contracts can be accepted and bonus reward calculated upon fulfillment', () {
@@ -110,6 +136,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('1. SEVK EDİLECEK ÜRÜNÜ SEÇİN'), findsOneWidget);
+      await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+      await tester.pumpAndSettle();
       expect(find.text('TIRI PAZARA GÖNDER'), findsOneWidget);
     });
   });

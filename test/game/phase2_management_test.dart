@@ -81,6 +81,8 @@ void main() {
       session.advanceFarmOperations(cultivateDone);
 
       final plantTime = cultivateDone;
+      expect(session.canPlantCropOnPlot(2, OpeningSession.starterWheatId), isFalse);
+      session.unlockTechnology('T01');
       expect(session.canPlantCropOnPlot(2, OpeningSession.starterWheatId), isTrue);
       expect(session.plantCropOnPlot(2, OpeningSession.starterWheatId, plantTime), isTrue);
       final sowDone = plantTime.add(const Duration(minutes: 10));

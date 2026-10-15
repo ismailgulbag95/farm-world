@@ -11,6 +11,7 @@ import '../domain/farm_building.dart';
 import '../domain/logistics_fleet.dart';
 import '../domain/farm_item_catalog.dart';
 import '../domain/opening_session.dart';
+import '../domain/market_and_offline.dart';
 import '../domain/opening_crop_catalog.dart';
 import '../domain/procedural_farm_world.dart';
 import '../domain/tech_tree.dart';
@@ -36,10 +37,14 @@ class WorldMapScreen extends StatefulWidget {
     super.key,
     required this.session,
     required this.onSessionChanged,
+    this.offlineProgressReport,
+    this.recoveredFromBackup = false,
   });
 
   final OpeningSession session;
   final VoidCallback onSessionChanged;
+  final OfflineProgressReport? offlineProgressReport;
+  final bool recoveredFromBackup;
 
   @override
   State<WorldMapScreen> createState() => _WorldMapScreenState();
@@ -144,6 +149,37 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         setState(() => _mapRevision++);
       }
     });
+    final report = widget.offlineProgressReport;
+    final hasOfflineReport =
+        report != null && report.elapsedDuration >= const Duration(minutes: 1);
+    if (widget.recoveredFromBackup || hasOfflineReport) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              widget.recoveredFromBackup
+                  ? 'Kayıt yedekten kurtarıldı'
+                  : 'Çevrimdışı ilerleme',
+            ),
+            content: Text(
+              [
+                if (widget.recoveredFromBackup)
+                  'Ana kayıt okunamadı. Önceki geçerli kayıt yedekten açıldı.',
+                if (hasOfflineReport) report.summaryText,
+              ].join('\n\n'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Devam et'),
+              ),
+            ],
+          ),
+        );
+      });
+    }
   }
 
   Future<void> _loadLandmarkAtlas() async {
@@ -1894,6 +1930,33 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           width: _viewportSize.width / _zoom,
           height: _viewportSize.height / _zoom,
         );
+        final mapInstruction = _salesRouteMode
+            ? _InstructionPill(
+                icon: Icons.local_shipping_rounded,
+                text: _salesRouteStartPlotId == null
+                    ? 'İlk olarak sahip olduğun hasat tarlasına dokun.'
+                    : 'Tarla seçildi. Şimdi haritadaki “KASABA PAZARI” işaretine dokun.',
+              )
+            : _routeMode
+            ? _InstructionPill(
+                icon: Icons.add_road_rounded,
+                text: _routeStartParcelId == null
+                    ? 'Önce sahip olduğun başlangıç arazisine dokun.'
+                    : 'Şimdi hattın bağlanacağı ikinci sahipli araziyi seç.',
+              )
+            : _measureMode
+            ? _InstructionPill(
+                icon: Icons.straighten_rounded,
+                text: _measureEnd == null
+                    ? 'Mesafeyi başlatmak için haritaya dokun.'
+                    : 'Mesafe: ${_formatDistance(_measureStart!.distanceTo(_measureEnd!))} · yeni ölçüm için tekrar dokun.',
+              )
+            : _constructionPlacementMode
+            ? const _InstructionPill(
+                icon: Icons.construction_rounded,
+                text: 'İnşaat için sahip olduğun, çiftlik dışındaki uygun bir araziye dokun.',
+              )
+            : null;
 
         return Stack(
           fit: StackFit.expand,
@@ -2046,48 +2109,16 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                             ],
                           ],
                         ),
+                        if (mapInstruction != null) ...[
+                          const SizedBox(height: 6),
+                          mapInstruction,
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-            if (_salesRouteMode)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 54,
-                left: 12,
-                right: 12,
-                child: _InstructionPill(
-                  icon: Icons.local_shipping_rounded,
-                  text: _salesRouteStartPlotId == null
-                      ? 'İlk olarak sahip olduğun hasat tarlasına dokun.'
-                      : 'Tarla seçildi. Şimdi haritadaki “KASABA PAZARI” işaretine dokun.',
-                ),
-              ),
-            if (_routeMode)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 54,
-                left: 12,
-                right: 12,
-                child: _InstructionPill(
-                  icon: Icons.add_road_rounded,
-                  text: _routeStartParcelId == null
-                      ? 'Önce sahip olduğun başlangıç arazisine dokun.'
-                      : 'Şimdi hattın bağlanacağı ikinci sahipli araziyi seç.',
-                ),
-              ),
-            if (_measureMode)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 54,
-                left: 12,
-                right: 12,
-                child: _InstructionPill(
-                  icon: Icons.straighten_rounded,
-                  text: _measureEnd == null
-                      ? 'Mesafeyi başlatmak için haritaya dokun.'
-                      : 'Mesafe: ${_formatDistance(_measureStart!.distanceTo(_measureEnd!))} · yeni ölçüm için tekrar dokun.',
-                ),
-              ),
             Positioned(
               right: 12,
               bottom: panelLift + 4,
@@ -2111,16 +2142,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                 }),
               ),
             ),
-            if (_constructionPlacementMode)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 54,
-                left: 12,
-                right: 12,
-                child: const _InstructionPill(
-                  icon: Icons.construction_rounded,
-                  text: 'İnşaat için sahip olduğun, çiftlik dışındaki uygun bir araziye dokun.',
-                ),
-              ),
             if (selectedParcel != null && selectedBuilding != null)
               Positioned(
                 left: 12,
@@ -4261,6 +4282,18 @@ class _FarmPlotInfoCard extends StatelessWidget {
                 ],
               ],
             ] else ...[
+              if (plot.id != session.starterPlotId &&
+                  !session.hasResearch('T01')) ...[
+                const Text(
+                  'Yeni parsellerde ekim T01 araştırmasıyla açılır.',
+                  style: TextStyle(
+                    color: Color(0xFF8A6330),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               if (plot.isCultivated) ...[
                 Row(
                   children: [
@@ -4283,9 +4316,13 @@ class _FarmPlotInfoCard extends StatelessWidget {
                               child: Text(_cropName(item.id)),
                             ),
                         ],
-                        onChanged: (value) {
-                          if (value != null) onSelectCrop(value);
-                        },
+                        onChanged:
+                            plot.id != session.starterPlotId &&
+                                !session.hasResearch('T01')
+                            ? null
+                            : (value) {
+                                if (value != null) onSelectCrop(value);
+                              },
                       ),
                     ),
                   ],

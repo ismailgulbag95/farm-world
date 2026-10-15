@@ -78,6 +78,35 @@ void main() {
       expect(deliveredTruck.totalDeliveriesCount, greaterThanOrEqualTo(1));
     });
 
+    test('Market dispatch combines matching warehouse lots up to selected amount', () {
+      final manager = LogisticsFleetManager(
+        warehouseStock: [
+          CropStockBatch(cropId: 'CR01', amount: 4, ageMinutes: 2, quality: 0.8),
+          CropStockBatch(cropId: 'CR01', amount: 8, ageMinutes: 6, quality: 1.0),
+          CropStockBatch(cropId: 'CR02', amount: 30, ageMinutes: 0, quality: 1.0),
+        ],
+      );
+      manager.initializeStarterFleet();
+      manager.startStarterMarketRoute(
+        fieldX: 0,
+        fieldY: 0,
+        fieldName: 'Merkez Depo',
+        targetCropId: 'CR01',
+        loadAmountLimit: 10,
+      );
+
+      final truck = manager.vehicles.single;
+      expect(truck.cargoCropId, 'CR01');
+      expect(truck.cargoAmount, 10);
+      expect(truck.cargoAgeMinutes, closeTo(4.4, 0.0001));
+      expect(truck.cargoQuality, closeTo(0.92, 0.0001));
+      expect(
+        manager.warehouseStock.where((batch) => batch.cropId == 'CR01')
+            .fold<int>(0, (sum, batch) => sum + batch.amount),
+        2,
+      );
+    });
+
     test('OverflowPolicy redirects to market or waits when warehouse is full', () {
       final fullWarehouseManager = LogisticsFleetManager(
         warehouseCapacity: 20,

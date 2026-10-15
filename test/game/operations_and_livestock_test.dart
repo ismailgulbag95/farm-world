@@ -89,6 +89,34 @@ void main() {
       expect(compost.readyCompostBags, greaterThanOrEqualTo(1));
     });
 
+    test('Pasture bales can be transferred to the shared compost facility', () {
+      final session = OpeningSession(
+        initialState: const OpeningSessionState(
+          stage: OpeningStage.management,
+          hasMower: true,
+          hasWorker: true,
+          hasOwnedInitialPlot: true,
+          groundBaleCount: 2,
+          plots: [
+            CropPlotState(
+              id: 7,
+              name: 'Mera',
+              isOwned: true,
+              use: CropPlotUse.pasture,
+              readyGrassBales: 3,
+            ),
+          ],
+        ),
+      );
+
+      expect(session.compostableGrassBaleCount, 5);
+      expect(session.addGrassToCompost(4), isTrue);
+      expect(session.groundBaleCount, 0);
+      expect(session.plotById(7)!.readyGrassBales, 1);
+      expect(session.compostFacility.biomassStock, 100);
+      expect(session.compostableGrassBaleCount, 1);
+    });
+
     test('Applying organic compost gives plot 40% yield boost (compostYieldMultiplier = 1.40)', () {
       final session = OpeningSession(
         initialState: OpeningSessionState(

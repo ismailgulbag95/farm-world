@@ -423,8 +423,7 @@ class FleetVehicleState {
       queuedRouteIds: queuedRouteIds ?? this.queuedRouteIds,
       finishRouteAfterCycle:
           finishRouteAfterCycle ?? this.finishRouteAfterCycle,
-      isIndividuallyPaused:
-          isIndividuallyPaused ?? this.isIndividuallyPaused,
+      isIndividuallyPaused: isIndividuallyPaused ?? this.isIndividuallyPaused,
     );
   }
 
@@ -475,8 +474,7 @@ class FleetVehicleState {
             .whereType<String>()
             .toList(growable: false),
         finishRouteAfterCycle: json['finishRouteAfterCycle'] as bool? ?? false,
-        isIndividuallyPaused:
-            json['isIndividuallyPaused'] as bool? ?? false,
+        isIndividuallyPaused: json['isIndividuallyPaused'] as bool? ?? false,
       );
 }
 
@@ -778,9 +776,26 @@ class LogisticsFleetManager {
     int? loadAmountLimit,
     bool isOneShot = true,
     String? contractId,
+    String? vehicleId,
   }) {
     initializeStarterFleet();
-    const routeId = 'route_starter';
+    final defaultVehicleIndex = vehicleId == null
+        ? vehicles.indexWhere(
+            (vehicle) => vehicle.truckType == TruckType.starter,
+          )
+        : -1;
+    final requestedVehicleId =
+        vehicleId ??
+        (defaultVehicleIndex < 0 ? null : vehicles[defaultVehicleIndex].id);
+    if (requestedVehicleId == null) return;
+    final vehicleIndex = vehicles.indexWhere(
+      (vehicle) => vehicle.id == requestedVehicleId,
+    );
+    if (vehicleIndex < 0) return;
+    final selectedVehicle = vehicles[vehicleIndex];
+    final routeId = selectedVehicle.truckType == TruckType.starter
+        ? 'route_starter'
+        : 'route_market_${selectedVehicle.id}';
     final route = TransportRoute(
       id: routeId,
       name: 'Tarladan Pazara Satış Hattı',
@@ -814,9 +829,6 @@ class LogisticsFleetManager {
       routes[routeIndex] = route;
     }
 
-    final vehicleIndex = vehicles.indexWhere(
-      (vehicle) => vehicle.truckType == TruckType.starter,
-    );
     if (vehicleIndex != -1) {
       var vehicle = vehicles[vehicleIndex];
       final sourceIndex = targetCropId == null
@@ -825,19 +837,43 @@ class LogisticsFleetManager {
       if (!vehicle.hasCargo &&
           sourceIndex >= 0 &&
           sourceIndex < warehouseStock.length) {
-        final batch = warehouseStock[sourceIndex];
-        final loaded = min(
-          min(vehicle.remainingCapacity, batch.amount),
+        final cropId = targetCropId ?? warehouseStock[sourceIndex].cropId;
+        var loadRemaining = min(
+          vehicle.remainingCapacity,
           loadAmountLimit ?? vehicle.remainingCapacity,
         );
-        batch.amount -= loaded;
-        if (batch.amount <= 0) warehouseStock.removeAt(sourceIndex);
-        vehicle = vehicle.copyWith(
-          cargoCropId: batch.cropId,
-          cargoAmount: loaded,
-          cargoAgeMinutes: batch.ageMinutes,
-          cargoQuality: batch.quality,
-        );
+        var loaded = 0;
+        var weightedAge = 0.0;
+        var weightedQuality = 0.0;
+        for (
+          var index = 0;
+          index < warehouseStock.length && loadRemaining > 0;
+        ) {
+          final batch = warehouseStock[index];
+          if (batch.cropId != cropId) {
+            index++;
+            continue;
+          }
+          final amount = min(loadRemaining, batch.amount);
+          loaded += amount;
+          loadRemaining -= amount;
+          weightedAge += batch.ageMinutes * amount;
+          weightedQuality += batch.quality * amount;
+          batch.amount -= amount;
+          if (batch.amount <= 0) {
+            warehouseStock.removeAt(index);
+          } else {
+            index++;
+          }
+        }
+        if (loaded > 0) {
+          vehicle = vehicle.copyWith(
+            cargoCropId: cropId,
+            cargoAmount: loaded,
+            cargoAgeMinutes: weightedAge / loaded,
+            cargoQuality: weightedQuality / loaded,
+          );
+        }
       }
       vehicles[vehicleIndex] = vehicle.copyWith(
         assignedRouteId: routeId,
@@ -902,6 +938,7 @@ class LogisticsFleetManager {
   /// Returns total credits earned from market deliveries in this step.
   int update(
     double dtSeconds, {
+    int reservedWarehouseCapacity = 0,
     int Function(String cropId)? unitPriceProvider,
     int Function({
       required String contractId,
@@ -914,6 +951,8 @@ class LogisticsFleetManager {
   }) {
     int earnedCredits = 0;
     final getPrice = unitPriceProvider ?? ((_) => 30);
+    int availableWarehouseCapacity() =>
+        max(0, remainingWarehouseCapacity - reservedWarehouseCapacity);
 
     for (final batch in warehouseStock) {
       batch.ageMinutes += dtSeconds / 60.0;
@@ -1027,7 +1066,7 @@ class LogisticsFleetManager {
         } else if (arrivedStop.action == CargoAction.unload) {
           // Unload cargo to warehouse or processing facility
           if (v.hasCargo) {
-            if (remainingWarehouseCapacity >= v.cargoAmount) {
+            if (availableWarehouseCapacity() >= v.cargoAmount) {
               depositToWarehouse(
                 v.cargoCropId!,
                 v.cargoAmount,
@@ -1143,7 +1182,7 @@ class LogisticsFleetManager {
         } else if (arrivedStop.action == CargoAction.unload) {
           // Unload cargo
           if (v.hasCargo) {
-            if (remainingWarehouseCapacity >= v.cargoAmount) {
+            if (availableWarehouseCapacity() >= v.cargoAmount) {
               depositToWarehouse(
                 v.cargoCropId!,
                 v.cargoAmount,

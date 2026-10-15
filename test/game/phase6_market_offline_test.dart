@@ -61,6 +61,7 @@ void main() {
 
       // Buy expansion plot 1 and plant starter wheat
       session.buyPlot(1);
+      session.unlockTechnology('T01');
       session.plantCropOnPlot(1, OpeningSession.starterWheatId, now);
 
       // Setup fleet
@@ -79,6 +80,12 @@ void main() {
       expect(report.earnedCredits, greaterThan(0));
       expect(report.summaryText, contains('Çevrimdışı İlerleme'));
       expect(report.summaryText, contains('Tır Teslimatları'));
+    });
+
+    test('Livestock market prices use the item ids produced by the farm', () {
+      final market = MarketPriceSimulator();
+      expect(market.getBasePrice('fresh_milk'), 82);
+      expect(market.getBasePrice('wool_bale'), 115);
     });
   });
 }

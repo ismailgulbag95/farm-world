@@ -55,6 +55,7 @@ void main() {
 
       session.buyWorldParcel(parcel);
       final plot = session.plotForWorldParcel(parcel.id)!;
+      session.unlockTechnology('T01');
 
       final now = DateTime.utc(2026, 10, 11, 10, 0);
       session.recordFirstSuccessfulPlanting(now);
@@ -122,6 +123,47 @@ void main() {
       final finishedPlot = session.plotById(plot.id)!;
       expect(finishedPlot.hasActiveJob, isFalse);
       expect(finishedPlot.isCultivated, isTrue);
+    });
+
+    test('Offline crop harvest completes, deposits output, and starts the next cycle', () {
+      final session = OpeningSession();
+      session.addCredits(20000);
+      session.skipToManagement(minimumCredits: 10000);
+      const parcel = WorldMapParcel(
+        id: 'field_test_offline_harvest',
+        name: 'Hasat Tarlası',
+        center: WorldMapPoint(120, 60),
+        width: 80,
+        height: 60,
+        price: 800,
+        fertility: 80,
+        cropType: WorldCropType.grain,
+      );
+      expect(session.buyWorldParcel(parcel), isTrue);
+      final plot = session.plotForWorldParcel(parcel.id)!;
+      session.unlockTechnology('T01');
+      final start = DateTime.utc(2026, 10, 11, 12);
+      session.recordFirstSuccessfulPlanting(start);
+      expect(session.cultivatePlot(plot.id, start), isTrue);
+      final cultivatedAt = start.add(const Duration(minutes: 10));
+      session.advanceFarmOperations(cultivatedAt);
+      expect(
+        session.plantCropOnPlot(plot.id, OpeningSession.starterWheatId, cultivatedAt),
+        isTrue,
+      );
+      final plantedAt = cultivatedAt.add(const Duration(minutes: 10));
+      session.advanceFarmOperations(plantedAt);
+      final ripeAt = plantedAt.add(const Duration(minutes: 7));
+
+      final report = const OfflineProgressSimulator().simulateCatchUp(
+        session,
+        const Duration(hours: 1),
+        from: ripeAt,
+      );
+
+      expect(report.harvestedCropsCount, greaterThan(0));
+      expect(session.warehouseAmountFor(OpeningSession.starterWheatId), greaterThan(0));
+      expect(session.plotById(plot.id)!.activeCropId, isNotNull);
     });
   });
 }

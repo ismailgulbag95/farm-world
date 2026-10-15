@@ -48,6 +48,9 @@ enum SaveRecoveryStatus {
   /// Save file exists but could not be parsed, was malformed, or content was unreadable.
   corrupt,
 
+  /// Primary save could not be read, so a verified backup was loaded.
+  recoveredFromBackup,
+
   /// Save file has a schema version incompatible with or newer than this app release.
   unsupportedVersion,
 }
@@ -122,6 +125,7 @@ class OpeningSessionStore {
   final String tempFileName;
 
   bool _canSave = true;
+  bool _preserveBackupOnNextSave = false;
   LoadSessionResult? _lastLoadResult;
 
   /// Whether saves are currently permitted.
@@ -149,9 +153,32 @@ class OpeningSessionStore {
   /// If the save file is corrupt or has an unsupported version, writes are disabled
   /// for this launch to prevent destructive overwrite, and a diagnostic log is recorded.
   Future<LoadSessionResult> load() async {
+    _preserveBackupOnNextSave = false;
     try {
       final dir = await _directoryProvider();
       final saveFile = File(_resolvePath(dir.path, fileName));
+      final backupFile = File(_resolvePath(dir.path, backupFileName));
+
+      final primaryIsValid = await _readValidSave(saveFile);
+      if (primaryIsValid == null && await backupFile.exists()) {
+        final backup = await _readValidSave(backupFile);
+        if (backup != null) {
+          _canSave = true;
+          _preserveBackupOnNextSave = true;
+          final result = LoadSessionResult(
+            status: SaveRecoveryStatus.recoveredFromBackup,
+            session: OpeningSession(initialState: backup.state),
+            state: backup.state,
+            savedAt: backup.savedAt,
+            canSave: true,
+            schemaVersion: backup.version,
+            diagnosticLog:
+                'Primary save was invalid; loaded the verified backup.',
+          );
+          _lastLoadResult = result;
+          return result;
+        }
+      }
 
       if (!await saveFile.exists()) {
         _canSave = true;
@@ -330,11 +357,16 @@ class OpeningSessionStore {
 
       // 2. Preserve previous valid save as a recoverable backup before replacement
       if (await saveFile.exists()) {
-        await saveFile.copy(backupFile.path);
+        if (_preserveBackupOnNextSave) {
+          await saveFile.copy('${saveFile.path}.corrupt');
+        } else {
+          await saveFile.copy(backupFile.path);
+        }
       }
 
       // 3. Atomically replace save file with temp file
       await tempFile.rename(saveFile.path);
+      _preserveBackupOnNextSave = false;
 
       return SaveSessionResult.success;
     } catch (e) {
@@ -365,12 +397,52 @@ class OpeningSessionStore {
     }
   }
 
+  Future<_ParsedSessionSave?> _readValidSave(File file) async {
+    try {
+      if (!await file.exists()) return null;
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) return null;
+      final decoded = jsonDecode(content);
+      if (decoded is! Map<String, dynamic>) return null;
+      final version = decoded['version'];
+      if (version is! int ||
+          (version != 1 && version != SessionSaveEnvelope.currentVersion)) {
+        return null;
+      }
+      final data = decoded['data'];
+      if (data is! Map<String, dynamic>) return null;
+      final state = OpeningSessionState.fromJson(data);
+      final savedAt = decoded['savedAt'] is String
+          ? DateTime.tryParse(decoded['savedAt'] as String)?.toUtc()
+          : null;
+      return _ParsedSessionSave(
+        state: state,
+        savedAt: savedAt,
+        version: version,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static String _resolvePath(String dirPath, String fileName) {
     if (dirPath.endsWith('/') || dirPath.endsWith('\\')) {
       return '$dirPath$fileName';
     }
     return '$dirPath${Platform.pathSeparator}$fileName';
   }
+}
+
+class _ParsedSessionSave {
+  const _ParsedSessionSave({
+    required this.state,
+    required this.version,
+    this.savedAt,
+  });
+
+  final OpeningSessionState state;
+  final int version;
+  final DateTime? savedAt;
 }
 
 /// Coordinates throttled periodic autosaving and app lifecycle flushing for an [OpeningSession].

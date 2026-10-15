@@ -283,7 +283,6 @@ class _FieldsPanel extends StatelessWidget {
                       ),
                       onPressed: () {
                         if (session.harvestCropOnPlot(plot.id, now)) {
-                          session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
                           onChanged();
                         }
                       },
@@ -321,7 +320,6 @@ class _FieldsPanel extends StatelessWidget {
                         ),
                         onPressed: () {
                           if (session.balePasturePlot(plot.id, now)) {
-                            session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
                             onChanged();
                           }
                         },
@@ -351,7 +349,6 @@ class _FieldsPanel extends StatelessWidget {
                         onPressed: session.canCultivatePlot(plot.id)
                             ? () {
                                 if (session.cultivatePlot(plot.id, now)) {
-                                  session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
                                   onChanged();
                                 }
                               }
@@ -384,7 +381,6 @@ class _FieldsPanel extends StatelessWidget {
                               ),
                               onPressed: () {
                                 if (session.plantCropOnPlot(plot.id, cropId, now)) {
-                                  session.advanceFarmOperations(now.add(const Duration(minutes: 10)));
                                   onChanged();
                                 }
                               },

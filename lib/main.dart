@@ -31,9 +31,10 @@ void main() async {
   session.skipToManagement(minimumCredits: 4260);
   session.grantStarterEquipmentOnce();
   final lastSavedAt = loadResult.savedAt;
+  OfflineProgressReport? offlineProgressReport;
   if (lastSavedAt != null) {
     const offlineSimulator = OfflineProgressSimulator();
-    offlineSimulator.simulateCatchUp(
+    offlineProgressReport = offlineSimulator.simulateCatchUp(
       session,
       DateTime.now().toUtc().difference(lastSavedAt),
       from: lastSavedAt,
@@ -43,36 +44,50 @@ void main() async {
     await store.save(session.state);
   }
 
-  runApp(WorldMapPrototypeApp(store: store, session: session));
+  runApp(
+    WorldMapPrototypeApp(
+      store: store,
+      session: session,
+      offlineProgressReport: offlineProgressReport,
+      recoveredFromBackup:
+          loadResult.status == SaveRecoveryStatus.recoveredFromBackup,
+    ),
+  );
 }
 
-enum _AppLaunchPhase {
-  loading,
-  comic,
-  worldMap,
-}
+enum _AppLaunchPhase { loading, comic, worldMap }
 
 class WorldMapPrototypeApp extends StatefulWidget {
   const WorldMapPrototypeApp({
     super.key,
     required this.store,
     required this.session,
+    this.offlineProgressReport,
+    this.recoveredFromBackup = false,
   });
 
   final OpeningSessionStore store;
   final OpeningSession session;
+  final OfflineProgressReport? offlineProgressReport;
+  final bool recoveredFromBackup;
 
   @override
   State<WorldMapPrototypeApp> createState() => _WorldMapPrototypeAppState();
 }
 
 class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
-  late final OpeningSessionAutosaver _autosaver = OpeningSessionAutosaver(
-    session: widget.session,
-    store: widget.store,
-  )..start();
+  late final OpeningSessionAutosaver _autosaver;
 
   _AppLaunchPhase _phase = _AppLaunchPhase.loading;
+
+  @override
+  void initState() {
+    super.initState();
+    _autosaver = OpeningSessionAutosaver(
+      session: widget.session,
+      store: widget.store,
+    )..start();
+  }
 
   @override
   void dispose() {
@@ -121,17 +136,17 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
     ),
     home: switch (_phase) {
       _AppLaunchPhase.loading => GameLoadingScreen(
-          onLoadingComplete: _onLoadingComplete,
-        ),
-      _AppLaunchPhase.comic => StoryComicScreen(
-          onComplete: _onComicComplete,
-        ),
+        onLoadingComplete: _onLoadingComplete,
+      ),
+      _AppLaunchPhase.comic => StoryComicScreen(onComplete: _onComicComplete),
       _AppLaunchPhase.worldMap => Scaffold(
-          body: WorldMapScreen(
-            session: widget.session,
-            onSessionChanged: () => _autosaver.flush(),
-          ),
+        body: WorldMapScreen(
+          session: widget.session,
+          onSessionChanged: () => _autosaver.flush(),
+          offlineProgressReport: widget.offlineProgressReport,
+          recoveredFromBackup: widget.recoveredFromBackup,
         ),
+      ),
     },
   );
 }
@@ -320,12 +335,23 @@ class FarmWorldAppState extends State<FarmWorldApp> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xDD1B3929),
                           foregroundColor: const Color(0xFFFFC84F),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           elevation: 3,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         icon: const Icon(Icons.bolt_rounded, size: 14),
-                        label: const Text('Yönetime Geç', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                        label: const Text(
+                          'Yönetime Geç',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         onPressed: () {
                           _game.skipToManagement();
                           setState(() {
