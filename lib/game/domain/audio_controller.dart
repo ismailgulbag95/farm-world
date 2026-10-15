@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 enum SoundEffect {
   mow,
   baleDrop,
+  balePickup,
   harvest,
+  largeSale,
   purchaseParcel,
   drawRoute,
   truckDepart,
@@ -16,11 +18,7 @@ enum SoundEffect {
 }
 
 /// Desteklenen arka plan müzikleri.
-enum BackgroundMusic {
-  ruralPeace,
-  marketBustle,
-  managementAmbience,
-}
+enum BackgroundMusic { ruralPeace, marketBustle, managementAmbience }
 
 /// Farm World Merkezi Ses ve Haptik Yönetim Servisi.
 ///
@@ -37,6 +35,7 @@ class AudioController {
   double _soundVolume = 1.0;
   double _musicVolume = 0.8;
   BackgroundMusic? _currentTrack;
+  DateTime? _lastMowHapticAt;
 
   bool get soundEnabled => _soundEnabled;
   bool get musicEnabled => _musicEnabled;
@@ -76,14 +75,14 @@ class AudioController {
   }
 
   /// Belirtilen ses efektini çalar ve haptik titreşimi tetikler.
-  Future<void> playEffect(SoundEffect effect) async {
+  Future<void> playEffect(SoundEffect effect, {bool playSound = true}) async {
     // 1. Haptik Geri Bildirim
     if (_hapticsEnabled) {
       await _triggerHaptic(effect);
     }
 
     // 2. Ses Efekti Çalma (Eğer ses kapalıysa atla)
-    if (!_soundEnabled || _soundVolume <= 0.01) return;
+    if (!playSound || !_soundEnabled || _soundVolume <= 0.01) return;
 
     try {
       // Gelecekte asset/audio eklendiğinde devreye girecek güvenli yükleyici
@@ -121,11 +120,28 @@ class AudioController {
 
   Future<void> _triggerHaptic(SoundEffect effect) async {
     try {
+      if (effect == SoundEffect.mow) {
+        final now = DateTime.now();
+        if (_lastMowHapticAt != null &&
+            now.difference(_lastMowHapticAt!) <
+                const Duration(milliseconds: 260)) {
+          return;
+        }
+        _lastMowHapticAt = now;
+      }
       final Future<void> action = switch (effect) {
-        SoundEffect.mow || SoundEffect.coinEarned => HapticFeedback.lightImpact(),
-        SoundEffect.harvest || SoundEffect.baleDrop || SoundEffect.truckDepart => HapticFeedback.mediumImpact(),
-        SoundEffect.purchaseParcel || SoundEffect.techUnlock || SoundEffect.contractComplete => HapticFeedback.heavyImpact(),
-        SoundEffect.drawRoute || SoundEffect.buttonClick => HapticFeedback.selectionClick(),
+        SoundEffect.mow ||
+        SoundEffect.harvest ||
+        SoundEffect.coinEarned => HapticFeedback.lightImpact(),
+        SoundEffect.baleDrop ||
+        SoundEffect.balePickup ||
+        SoundEffect.truckDepart => HapticFeedback.mediumImpact(),
+        SoundEffect.largeSale ||
+        SoundEffect.purchaseParcel ||
+        SoundEffect.techUnlock ||
+        SoundEffect.contractComplete => HapticFeedback.heavyImpact(),
+        SoundEffect.drawRoute ||
+        SoundEffect.buttonClick => HapticFeedback.selectionClick(),
       };
       await action.catchError((_) {});
     } catch (_) {

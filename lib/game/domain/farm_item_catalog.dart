@@ -30,6 +30,13 @@ abstract final class FarmItemCatalog {
       'assets/images/products/packed_potatoes.webp',
     ),
     'fresh_eggs': ('Yumurta', 'assets/images/products/fresh_eggs.webp'),
+    'fresh_milk': ('Taze Süt', 'assets/images/products/cow_milk.webp'),
+    'wool_bale': ('Yün Balyası', 'assets/images/products/wool.webp'),
+    'organic_fertilizer': (
+      'Organik Kompost Gübre',
+      'assets/images/equipment/fertilize_starter.webp',
+    ),
+    'grass_bale': ('Ot balyası', 'assets/images/equipment/bale_ova_1500.webp'),
     'goat_milk': ('Keçi sütü', 'assets/images/products/goat_milk.webp'),
     'honey': ('Bal', 'assets/images/products/honey.webp'),
     'wool': ('Yün', 'assets/images/products/wool.webp'),

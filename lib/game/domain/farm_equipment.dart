@@ -1141,3 +1141,81 @@ class FarmOperationJob {
     tractorEquipmentId,
   );
 }
+
+/// Tracks fuel levels, engine oil condition and mechanical wear for farm machinery.
+class EquipmentMaintenanceState {
+  EquipmentMaintenanceState({
+    required this.equipmentId,
+    this.fuelPercent = 100.0,
+    this.engineOilPercent = 100.0,
+    this.wearConditionPercent = 100.0,
+  });
+
+  final String equipmentId;
+  double fuelPercent;
+  double engineOilPercent;
+  double wearConditionPercent;
+
+  bool get isOutOfFuel => fuelPercent <= 0.01;
+  bool get isLowFuel => fuelPercent < 20.0;
+  bool get needsOilChange => engineOilPercent < 25.0;
+  bool get needsService => engineOilPercent < 25.0 || wearConditionPercent < 40.0;
+
+  /// Degradation penalty if machine is neglected.
+  double get performanceMultiplier {
+    if (isOutOfFuel) return 0.0; // Cannot run without fuel
+    var mult = 1.0;
+    if (needsOilChange) mult *= 0.82;
+    if (wearConditionPercent < 40.0) mult *= 0.78;
+    return mult;
+  }
+
+  /// Consumes fuel and adds mechanical wear per field operation step.
+  void consumeOperation({double fuelDrain = 12.0, double wearDrain = 6.0}) {
+    fuelPercent = math.max(0.0, fuelPercent - fuelDrain);
+    engineOilPercent = math.max(0.0, engineOilPercent - (wearDrain * 0.7));
+    wearConditionPercent = math.max(0.0, wearConditionPercent - wearDrain);
+  }
+
+  /// Refuels the tank (returns percentage points refueled).
+  double refuel({double targetPercent = 100.0}) {
+    final before = fuelPercent;
+    fuelPercent = math.min(100.0, targetPercent);
+    return fuelPercent - before;
+  }
+
+  /// Full mechanical overhaul & synthetic oil change.
+  void serviceOverhaul() {
+    engineOilPercent = 100.0;
+    wearConditionPercent = 100.0;
+  }
+
+  EquipmentMaintenanceState copyWith({
+    String? equipmentId,
+    double? fuelPercent,
+    double? engineOilPercent,
+    double? wearConditionPercent,
+  }) => EquipmentMaintenanceState(
+    equipmentId: equipmentId ?? this.equipmentId,
+    fuelPercent: fuelPercent ?? this.fuelPercent,
+    engineOilPercent: engineOilPercent ?? this.engineOilPercent,
+    wearConditionPercent: wearConditionPercent ?? this.wearConditionPercent,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'equipmentId': equipmentId,
+    'fuelPercent': fuelPercent,
+    'engineOilPercent': engineOilPercent,
+    'wearConditionPercent': wearConditionPercent,
+  };
+
+  factory EquipmentMaintenanceState.fromJson(Map<String, dynamic> json) =>
+      EquipmentMaintenanceState(
+        equipmentId: json['equipmentId'] as String,
+        fuelPercent: (json['fuelPercent'] as num?)?.toDouble() ?? 100.0,
+        engineOilPercent:
+            (json['engineOilPercent'] as num?)?.toDouble() ?? 100.0,
+        wearConditionPercent:
+            (json['wearConditionPercent'] as num?)?.toDouble() ?? 100.0,
+      );
+}

@@ -15,10 +15,13 @@ import '../domain/opening_crop_catalog.dart';
 import '../domain/procedural_farm_world.dart';
 import '../domain/tech_tree.dart';
 import 'farm_management_sheet.dart';
+import 'farm_operations_sheet.dart';
 import 'market_trade_sheet.dart';
 import 'tech_tree_overlay.dart';
 import 'story_comic_screen.dart';
 import '../domain/audio_controller.dart';
+import '../domain/delivery_contracts.dart';
+import 'farm_companion_hud.dart';
 
 const Color _mapInk = Color(0xFF18392A);
 const Color _mapGold = Color(0xFFFFC84F);
@@ -70,7 +73,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   final Map<int, String> _selectedCropByPlot = {};
   int _farmTickCount = 0;
 
-  static const double _minZoom = 0.18;
+  static const double _minZoom = 0.10;
   static const double _maxZoom = 1.85;
 
   @override
@@ -160,6 +163,27 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   Offset _screenToWorld(Offset screenPoint) {
     final center = Offset(_viewportSize.width / 2, _viewportSize.height / 2);
     return _cameraCenter + (screenPoint - center) / _zoom;
+  }
+
+  Offset _clampCameraCenter(Offset center, double zoom) {
+    if (_viewportSize.width <= 0 || _viewportSize.height <= 0) return center;
+    final halfVisibleWidth = (_viewportSize.width / 2) / zoom;
+    final halfVisibleHeight = (_viewportSize.height / 2) / zoom;
+
+    final bounds = ProceduralFarmWorld.worldBounds;
+    final minX = bounds.left + halfVisibleWidth;
+    final maxX = bounds.right - halfVisibleWidth;
+    final minY = bounds.top + halfVisibleHeight;
+    final maxY = bounds.bottom - halfVisibleHeight;
+
+    final double clampedX = minX > maxX
+        ? bounds.center.dx
+        : center.dx.clamp(minX, maxX);
+    final double clampedY = minY > maxY
+        ? bounds.center.dy
+        : center.dy.clamp(minY, maxY);
+
+    return Offset(clampedX, clampedY);
   }
 
   WorldMapParcel? _parcelAt(WorldMapPoint point) {
@@ -753,8 +777,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
       final heading = _fleetVehicleHeading(overlapGroup.first);
       for (var index = 0; index < overlapGroup.length; index++) {
-        final angle =
-            heading + (math.pi * 2 * index / overlapGroup.length);
+        final angle = heading + (math.pi * 2 * index / overlapGroup.length);
         offsets[overlapGroup[index].id] = Offset(
           math.cos(angle) * radius,
           math.sin(angle) * radius,
@@ -884,13 +907,17 @@ class _WorldMapScreenState extends State<WorldMapScreen>
           _viewportSize.width / 2,
           _viewportSize.height / 2,
         );
-        _cameraCenter =
-            _gestureStartAnchor -
-            (details.localFocalPoint - viewportCenter) / _zoom;
+        _cameraCenter = _clampCameraCenter(
+          _gestureStartAnchor -
+              (details.localFocalPoint - viewportCenter) / _zoom,
+          _zoom,
+        );
       } else {
-        _cameraCenter =
-            _gestureStartCamera -
-            (details.localFocalPoint - _gestureStartFocal) / _zoom;
+        _cameraCenter = _clampCameraCenter(
+          _gestureStartCamera -
+              (details.localFocalPoint - _gestureStartFocal) / _zoom,
+          _zoom,
+        );
       }
     });
   }
@@ -1126,6 +1153,44 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     if (mounted) setState(() {});
   }
 
+  Future<void> _openFarmAnalytics() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FarmAnalyticsSheet(session: widget.session),
+    );
+  }
+
+  Future<void> _openFarmOperations() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFFFFF8E9),
+      builder: (context) => FarmOperationsSheet(
+        session: widget.session,
+        onChanged: () {
+          widget.onSessionChanged();
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+    widget.onSessionChanged();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openFarmAlmanac() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FarmAlmanacSheet(session: widget.session),
+    );
+  }
+
   Future<void> _openEquipmentStore() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1253,8 +1318,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     yController.dispose();
     if (coordinate == null || !mounted) return;
     setState(() {
-      _cameraCenter = coordinate;
-      if (_zoom < 0.42) _zoom = 0.42;
+      final targetZoom = _zoom < 0.42 ? 0.42 : _zoom;
+      _cameraCenter = _clampCameraCenter(coordinate, targetZoom);
+      _zoom = targetZoom;
       _selectedParcelId = null;
     });
   }
@@ -1434,8 +1500,8 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final fuelColor = fuelRatio > 0.4
           ? const Color(0xFF4CAF50)
           : fuelRatio > 0.15
-              ? const Color(0xFFFF9800)
-              : const Color(0xFFF44336);
+          ? const Color(0xFFFF9800)
+          : const Color(0xFFF44336);
       final hasCargo = vehicle.cargoAmount > 0;
 
       markers.add(
@@ -1455,26 +1521,66 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   width: selected ? 1.5 : 0.8,
                 ),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 3,
+                    offset: Offset(0, 1),
+                  ),
                 ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (vehicle.status == VehicleStatus.loading) ...[
-                    const Icon(Icons.hourglass_top_rounded, color: _mapGold, size: 9),
+                    const Icon(
+                      Icons.hourglass_top_rounded,
+                      color: _mapGold,
+                      size: 9,
+                    ),
                     const SizedBox(width: 2),
-                    const Text('Yükleniyor', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Yükleniyor',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ] else if (vehicle.status == VehicleStatus.unloading) ...[
-                    const Icon(Icons.unarchive_rounded, color: _mapGold, size: 9),
+                    const Icon(
+                      Icons.unarchive_rounded,
+                      color: _mapGold,
+                      size: 9,
+                    ),
                     const SizedBox(width: 2),
-                    const Text('Boşaltılıyor', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Boşaltılıyor',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ] else if (hasCargo) ...[
                     const Text('📦', style: TextStyle(fontSize: 8)),
                     const SizedBox(width: 2),
-                    Text('${vehicle.cargoAmount}t', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    Text(
+                      '${vehicle.cargoAmount}t',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ] else ...[
-                    Text(vehicle.id.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 7.5, fontWeight: FontWeight.w600)),
+                    Text(
+                      vehicle.id.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 7.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -1642,8 +1748,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             ),
           );
         }
-        final cameraCoordinates =
-            'X ${_cameraCenter.dx.round()} · Y ${_cameraCenter.dy.round()}';
         final farmCenter = Offset(
           (-150 - _cameraCenter.dx) * _zoom + _viewportSize.width / 2,
           (-120 - _cameraCenter.dy) * _zoom + _viewportSize.height / 2,
@@ -1664,6 +1768,38 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         );
         final fleetMarkers = _fleetMapMarkers();
         final buildingMarkers = _farmBuildingMapMarkers(DateTime.now());
+        final playerPoint = selectedPlot == null
+            ? Offset(tutorialPlot?.mapX ?? -150, tutorialPlot?.mapY ?? -120)
+            : Offset(selectedPlot.mapX, selectedPlot.mapY);
+        final radarTrucks = widget.session.fleetManager.vehicles
+            .map(_fleetVehicleWorldPoint)
+            .toList(growable: false);
+        final radarFields = widget.session.plots
+            .where((plot) => plot.isOwned)
+            .map((plot) => Offset(plot.mapX, plot.mapY))
+            .toList(growable: false);
+        final radarRoutes = widget.session.fleetManager.routes
+            .where((route) => route.stops.length > 1)
+            .map(
+              (route) => route.stops
+                  .map((stop) => Offset(stop.positionX, stop.positionY))
+                  .toList(growable: false),
+            )
+            .toList(growable: false);
+        final hasMarketOrder = widget.session.contractManager.visibleContracts
+            .any(
+              (contract) =>
+                  contract.status == DeliveryContractStatus.offered ||
+                  contract.status == DeliveryContractStatus.accepted,
+            );
+        final radarOrders = hasMarketOrder
+            ? const [Offset(starterMarketMapX, starterMarketMapY)]
+            : const <Offset>[];
+        final radarViewport = Rect.fromCenter(
+          center: _cameraCenter,
+          width: _viewportSize.width / _zoom,
+          height: _viewportSize.height / _zoom,
+        );
 
         return Stack(
           fit: StackFit.expand,
@@ -1744,50 +1880,82 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                           tutorialStep == FarmTutorialStep.deliveryRoute ||
                           _salesRouteMode,
                       onSearch: _openCoordinateSearch,
+                      onOpenAnalytics: _openFarmAnalytics,
+                      onOpenAlmanac: _openFarmAlmanac,
+                      onOpenOperations: _openFarmOperations,
                     ),
-                    if (tutorialStep != FarmTutorialStep.complete) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _FarmTutorialCoach(
-                          step: tutorialStep,
-                          plot: tutorialPlot,
-                          session: widget.session,
-                          onOpenComic: _openStoryComic,
-                          onBegin: () {
-                            widget.session.setFarmTutorialStep(
-                              FarmTutorialStep.prepare,
-                            );
-                            widget.onSessionChanged();
-                            final starter = widget.session.plotById(
-                              widget.session.starterPlotId,
-                            );
-                            setState(() {
-                              if (starter != null) {
-                                _selectedFarmPlotId = starter.id;
-                                _cameraCenter = Offset(
-                                  starter.mapX,
-                                  starter.mapY,
-                                );
-                                _zoom = 0.9;
-                              }
-                            });
-                          },
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (tutorialStep != FarmTutorialStep.complete)
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: _FarmTutorialCoach(
+                                step: tutorialStep,
+                                plot: tutorialPlot,
+                                session: widget.session,
+                                onOpenComic: _openStoryComic,
+                                onBegin: () {
+                                  widget.session.setFarmTutorialStep(
+                                    FarmTutorialStep.prepare,
+                                  );
+                                  widget.onSessionChanged();
+                                  final starter = widget.session.plotById(
+                                    widget.session.starterPlotId,
+                                  );
+                                  setState(() {
+                                    if (starter != null) {
+                                      _selectedFarmPlotId = starter.id;
+                                      _cameraCenter = Offset(
+                                        starter.mapX,
+                                        starter.mapY,
+                                      );
+                                      _zoom = 0.9;
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (!_salesRouteMode &&
+                                !_routeMode &&
+                                !_measureMode &&
+                                !_constructionPlacementMode) ...[
+                              const SizedBox(height: 5),
+                              FarmRadarMiniMap(
+                                home: const Offset(-150, -120),
+                                player: playerPoint,
+                                viewport: radarViewport,
+                                trucks: radarTrucks,
+                                orders: radarOrders,
+                                fields: radarFields,
+                                routes: radarRoutes,
+                                onTap: () => setState(() {
+                                  _cameraCenter = playerPoint;
+                                  _zoom = math.max(_zoom, 0.72).toDouble();
+                                  _selectedParcelId = null;
+                                  _selectedFarmPlotId =
+                                      selectedPlot?.id ??
+                                      widget.session.starterPlotId;
+                                  _selectedFleetVehicleId = null;
+                                }),
+                              ),
+                            ],
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ],
                 ),
-              ),
-            ),
-            Positioned(
-              top:
-                  MediaQuery.paddingOf(context).top +
-                  (tutorialStep == FarmTutorialStep.complete ? 54 : 148),
-              right: 15,
-              child: _MapCoordinates(
-                coordinates: cameraCoordinates,
-                zoom: _zoom,
               ),
             ),
             if (_salesRouteMode)
@@ -2092,8 +2260,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                         _salesRouteMode = false;
                         _salesRouteStartPlotId = null;
                       });
-                    } else if (tutorialStep ==
-                        FarmTutorialStep.deliveryRoute) {
+                    } else if (tutorialStep == FarmTutorialStep.deliveryRoute) {
                       _beginSalesRouteDrawing();
                     } else {
                       setState(() {
@@ -2183,6 +2350,9 @@ class _TopActionBar extends StatelessWidget {
     required this.onFocusSalesPoint,
     required this.salesHighlighted,
     required this.onSearch,
+    required this.onOpenAnalytics,
+    required this.onOpenAlmanac,
+    required this.onOpenOperations,
   });
 
   final int balance;
@@ -2198,6 +2368,9 @@ class _TopActionBar extends StatelessWidget {
   final VoidCallback onFocusSalesPoint;
   final bool salesHighlighted;
   final VoidCallback onSearch;
+  final VoidCallback onOpenAnalytics;
+  final VoidCallback onOpenAlmanac;
+  final VoidCallback onOpenOperations;
 
   @override
   Widget build(BuildContext context) {
@@ -2209,6 +2382,12 @@ class _TopActionBar extends StatelessWidget {
         children: [
           _BalancePill(balance: balance),
           const SizedBox(width: 6),
+          _MapTopChip(
+            icon: Icons.agriculture_rounded,
+            label: 'İşletme',
+            onTap: onOpenOperations,
+          ),
+          const SizedBox(width: 5),
           _MapTopChip(
             icon: Icons.account_tree_rounded,
             label: 'Araştırma',
@@ -2255,6 +2434,18 @@ class _TopActionBar extends StatelessWidget {
             tooltip: 'Koordinata git',
             onTap: onSearch,
           ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.insights_rounded,
+            label: 'Analitik',
+            onTap: onOpenAnalytics,
+          ),
+          const SizedBox(width: 5),
+          _MapTopChip(
+            icon: Icons.auto_stories_rounded,
+            label: 'Almanak',
+            onTap: onOpenAlmanac,
+          ),
         ],
       ),
     );
@@ -2282,7 +2473,9 @@ class _MapTopChip extends StatelessWidget {
       color: active ? const Color(0xFF214D36) : const Color(0xF2FFF9E9),
       borderRadius: BorderRadius.circular(12),
       elevation: highlighted ? 6 : 2,
-      shadowColor: highlighted ? const Color(0xFFFFC84F) : const Color(0x33000000),
+      shadowColor: highlighted
+          ? const Color(0xFFFFC84F)
+          : const Color(0x33000000),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
@@ -2295,8 +2488,8 @@ class _MapTopChip extends StatelessWidget {
               color: highlighted
                   ? const Color(0xFFFFB02E)
                   : active
-                      ? const Color(0xFF214D36)
-                      : const Color(0xFFD6C99E),
+                  ? const Color(0xFF214D36)
+                  : const Color(0xFFD6C99E),
               width: highlighted ? 2.0 : 1.0,
             ),
           ),
@@ -2354,10 +2547,10 @@ class _BottomMapToolsBar extends StatelessWidget {
     final routeLabel = salesRouteMode
         ? 'Rotayı İptal Et'
         : routeMode
-            ? 'Hat Kapat'
-            : tutorialStep == FarmTutorialStep.deliveryRoute
-                ? 'Satış Rotası Çiz'
-                : 'Hat Kur';
+        ? 'Hat Kapat'
+        : tutorialStep == FarmTutorialStep.deliveryRoute
+        ? 'Satış Rotası Çiz'
+        : 'Hat Kur';
 
     return Container(
       padding: const EdgeInsets.all(4),
@@ -2443,8 +2636,8 @@ class _DockButton extends StatelessWidget {
                 color: active
                     ? _mapGold
                     : (highlighted
-                        ? const Color(0xFFB57C00)
-                        : const Color(0xFF385E38)),
+                          ? const Color(0xFFB57C00)
+                          : const Color(0xFF385E38)),
               ),
               const SizedBox(width: 4),
               Text(
@@ -2516,33 +2709,6 @@ class _HeaderIconButton extends StatelessWidget {
     tooltip: tooltip,
     visualDensity: VisualDensity.compact,
     icon: Icon(icon, color: _mapInk, size: 21),
-  );
-}
-
-
-class _MapCoordinates extends StatelessWidget {
-  const _MapCoordinates({required this.coordinates, required this.zoom});
-
-  final String coordinates;
-  final double zoom;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-    decoration: BoxDecoration(
-      color: const Color(0xDA173B2A),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: const Color(0x66FFF4D9)),
-    ),
-    child: Text(
-      'X $coordinates  ·  ${zoom.toStringAsFixed(2)}×',
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 9,
-        fontWeight: FontWeight.w800,
-        fontFeatures: [ui.FontFeature.tabularFigures()],
-      ),
-    ),
   );
 }
 
@@ -2675,22 +2841,22 @@ class _FarmTutorialCoach extends StatelessWidget {
     final totalSteps = 10;
 
     return Container(
-      constraints: const BoxConstraints(maxWidth: 430),
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      constraints: const BoxConstraints(maxWidth: 290),
+      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
       decoration: BoxDecoration(
         color: const Color(0xF5FFF9E9),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: step == FarmTutorialStep.story
               ? const Color(0xFFCC9A3F)
               : const Color(0xFFD8C99A),
-          width: step == FarmTutorialStep.story ? 1.6 : 1.1,
+          width: step == FarmTutorialStep.story ? 1.5 : 1.0,
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x55152E20),
-            blurRadius: 13,
-            offset: Offset(0, 4),
+            color: Color(0x40152E20),
+            blurRadius: 10,
+            offset: Offset(0, 3),
           ),
         ],
       ),
@@ -2698,19 +2864,19 @@ class _FarmTutorialCoach extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 35,
-            height: 35,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: const Color(0xFF214D36),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.agriculture_rounded,
               color: _mapGold,
-              size: 19,
+              size: 17,
             ),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2718,20 +2884,24 @@ class _FarmTutorialCoach extends StatelessWidget {
               children: [
                 Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _mapInk,
-                    fontSize: 10,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.45,
+                    letterSpacing: 0.4,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   message,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF475847),
-                    height: 1.25,
-                    fontSize: 10,
+                    height: 1.2,
+                    fontSize: 9.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2761,8 +2931,13 @@ class _FarmTutorialCoach extends StatelessWidget {
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF1E293B),
                               foregroundColor: const Color(0xFFFFD166),
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              side: const BorderSide(color: Color(0xFFFFD166), width: 1.5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              side: const BorderSide(
+                                color: Color(0xFFFFD166),
+                                width: 1.5,
+                              ),
                             ),
                             icon: const Icon(Icons.auto_stories, size: 16),
                             label: const Text(
@@ -2803,10 +2978,17 @@ class _FarmTutorialCoach extends StatelessWidget {
                     child: TextButton.icon(
                       onPressed: onOpenComic,
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
-                      icon: const Icon(Icons.auto_stories, size: 13, color: Color(0xFF8A6D23)),
+                      icon: const Icon(
+                        Icons.auto_stories,
+                        size: 13,
+                        color: Color(0xFF8A6D23),
+                      ),
                       label: const Text(
                         'Ayla Usta’nın Çizgi Romanı',
                         style: TextStyle(
@@ -6482,7 +6664,6 @@ class _LegendItem extends StatelessWidget {
   );
 }
 
-
 class _MapScaleBar extends StatelessWidget {
   const _MapScaleBar({required this.zoom});
 
@@ -6616,10 +6797,20 @@ class _WorldMapPainter extends CustomPainter {
       width: size.width / zoom,
       height: size.height / zoom,
     );
-    final leftChunk = (visible.left / farmWorldChunkSize).floor() - 1;
-    final rightChunk = (visible.right / farmWorldChunkSize).floor() + 1;
-    final topChunk = (visible.top / farmWorldChunkSize).floor() - 1;
-    final bottomChunk = (visible.bottom / farmWorldChunkSize).floor() + 1;
+    final leftChunk = ((visible.left / farmWorldChunkSize).floor() - 1).clamp(
+      ProceduralFarmWorld.minChunkX,
+      ProceduralFarmWorld.maxChunkX,
+    );
+    final rightChunk = ((visible.right / farmWorldChunkSize).floor() + 1).clamp(
+      ProceduralFarmWorld.minChunkX,
+      ProceduralFarmWorld.maxChunkX,
+    );
+    final topChunk = ((visible.top / farmWorldChunkSize).floor() - 1).clamp(
+      ProceduralFarmWorld.minChunkY,
+      ProceduralFarmWorld.maxChunkY,
+    );
+    final bottomChunk = ((visible.bottom / farmWorldChunkSize).floor() + 1)
+        .clamp(ProceduralFarmWorld.minChunkY, ProceduralFarmWorld.maxChunkY);
 
     canvas.save();
     canvas.translate(
@@ -6666,6 +6857,7 @@ class _WorldMapPainter extends CustomPainter {
     }
     _drawSalesPoint(canvas, highlighted: salesRouteMode);
     _drawMeasurements(canvas);
+    _drawWorldBoundaries(canvas);
     canvas.restore();
 
     _drawVignette(canvas, size);
@@ -7628,6 +7820,59 @@ class _WorldMapPainter extends CustomPainter {
     for (final point in [first, second]) {
       canvas.drawCircle(point, 11, Paint()..color = const Color(0xFFFFC84F));
       canvas.drawCircle(point, 5, Paint()..color = const Color(0xFF214D36));
+    }
+  }
+
+  void _drawWorldBoundaries(Canvas canvas) {
+    final bounds = ProceduralFarmWorld.worldBounds;
+
+    // Sınırın dışını kaplayan yarı saydam koyu sis ve keşfedilmemiş vadi alanı (EvenOdd fill)
+    final fogPaint = Paint()
+      ..color = const Color(0xEB112017)
+      ..style = PaintingStyle.fill;
+
+    const outerMargin = 6000.0;
+    final outerRect = bounds.inflate(outerMargin);
+    final fogPath = Path()
+      ..addRect(outerRect)
+      ..addRect(bounds)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(fogPath, fogPaint);
+
+    // Çiftlik dünya sınırı parıltısı
+    final borderGlow = Paint()
+      ..color = const Color(0x55FFC84F)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14;
+    canvas.drawRect(bounds, borderGlow);
+
+    // Ana sınır ahşap çit hattı
+    final borderFence = Paint()
+      ..color = const Color(0xFF6B4526)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8;
+    canvas.drawRect(bounds, borderFence);
+
+    // İç sınır çizgisi
+    final dashPaint = Paint()
+      ..color = const Color(0xFFFFE2A3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    canvas.drawRect(bounds.inflate(-5), dashPaint);
+
+    // Dört köşe sınır taşları ve işaret sütunları
+    final cornerStonePaint = Paint()..color = const Color(0xFF382C22);
+    final cornerPillarPaint = Paint()..color = const Color(0xFFFFC84F);
+    final corners = [
+      bounds.topLeft,
+      bounds.topRight,
+      bounds.bottomLeft,
+      bounds.bottomRight,
+    ];
+    for (final corner in corners) {
+      canvas.drawCircle(corner, 32, cornerStonePaint);
+      canvas.drawCircle(corner, 20, cornerPillarPaint);
+      canvas.drawCircle(corner, 8, cornerStonePaint);
     }
   }
 

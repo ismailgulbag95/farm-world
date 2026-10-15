@@ -16,6 +16,9 @@ class DeliveryContract {
     required this.deadline,
     this.deliveredAmount = 0,
     this.status = DeliveryContractStatus.offered,
+    this.merchantTitle,
+    this.bonusMultiplier = 1.0,
+    this.urgencyMinutes,
   });
 
   final String id;
@@ -26,6 +29,12 @@ class DeliveryContract {
   final DateTime deadline;
   final int deliveredAmount;
   final DeliveryContractStatus status;
+  final String? merchantTitle;
+  final double bonusMultiplier;
+  final int? urgencyMinutes;
+
+  bool get isUrgentMerchantOrder => merchantTitle != null;
+  int get totalRewardWithBonus => (rewardCredits * bonusMultiplier).round();
 
   int get remainingAmount =>
       (targetAmount - deliveredAmount).clamp(0, targetAmount).toInt();
@@ -34,6 +43,9 @@ class DeliveryContract {
   DeliveryContract copyWith({
     int? deliveredAmount,
     DeliveryContractStatus? status,
+    String? merchantTitle,
+    double? bonusMultiplier,
+    int? urgencyMinutes,
   }) => DeliveryContract(
     id: id,
     itemId: itemId,
@@ -43,6 +55,9 @@ class DeliveryContract {
     deadline: deadline,
     deliveredAmount: deliveredAmount ?? this.deliveredAmount,
     status: status ?? this.status,
+    merchantTitle: merchantTitle ?? this.merchantTitle,
+    bonusMultiplier: bonusMultiplier ?? this.bonusMultiplier,
+    urgencyMinutes: urgencyMinutes ?? this.urgencyMinutes,
   );
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +69,9 @@ class DeliveryContract {
     'deadline': deadline.toUtc().toIso8601String(),
     'deliveredAmount': deliveredAmount,
     'status': status.name,
+    if (merchantTitle != null) 'merchantTitle': merchantTitle,
+    'bonusMultiplier': bonusMultiplier,
+    if (urgencyMinutes != null) 'urgencyMinutes': urgencyMinutes,
   };
 
   factory DeliveryContract.fromJson(Map<String, dynamic> json) =>
@@ -68,6 +86,9 @@ class DeliveryContract {
         status: DeliveryContractStatus.values.byName(
           json['status'] as String? ?? DeliveryContractStatus.offered.name,
         ),
+        merchantTitle: json['merchantTitle'] as String?,
+        bonusMultiplier: (json['bonusMultiplier'] as num?)?.toDouble() ?? 1.0,
+        urgencyMinutes: json['urgencyMinutes'] as int?,
       );
 }
 
@@ -139,7 +160,7 @@ class DeliveryContractManager {
           ? DeliveryContractStatus.completed
           : DeliveryContractStatus.accepted,
     );
-    return completed ? current.rewardCredits : 0;
+    return completed ? current.totalRewardWithBonus : 0;
   }
 
   /// Expires overdue offers and creates three new offers at most once per day.
@@ -169,7 +190,22 @@ class DeliveryContractManager {
       for (var slot = 0; slot < 3; slot++) {
         final itemId = itemIds[(anchor + slot * 2) % itemIds.length];
         final unit = unitPrice(itemId).clamp(1, 100000);
-        final amount = 8 + ((anchor + slot * 7) % 13);
+        final isMerchantUrgent = slot == 1;
+        final amount = isMerchantUrgent ? 50 : 8 + ((anchor + slot * 7) % 13);
+        final merchantTitle = isMerchantUrgent
+            ? switch (itemId) {
+                'CR01' => 'Kasaba Fırını (Acil 15 Dk)',
+                'CR02' => 'Yem Fabrikası (Acil 15 Dk)',
+                'fresh_milk' => 'Merkez Mandıra (Acil 15 Dk)',
+                'wool_bale' => 'Tekstil Kooperatifi (Acil 15 Dk)',
+                _ => 'Kasaba Tüccarı (Acil 15 Dk)',
+              }
+            : null;
+        final bonusMult = isMerchantUrgent ? 1.50 : 1.0;
+        final deadlineDuration = isMerchantUrgent
+            ? const Duration(minutes: 15)
+            : const Duration(days: 2);
+
         contracts.add(
           DeliveryContract(
             id: 'market_${dayIndex}_$slot',
@@ -177,7 +213,10 @@ class DeliveryContractManager {
             targetAmount: amount,
             minimumQuality: slot == 2 ? 0.90 : 0.70,
             rewardCredits: (amount * unit * (slot == 2 ? 0.28 : 0.18)).round(),
-            deadline: now.toUtc().add(const Duration(days: 2)),
+            deadline: now.toUtc().add(deadlineDuration),
+            merchantTitle: merchantTitle,
+            bonusMultiplier: bonusMult,
+            urgencyMinutes: isMerchantUrgent ? 15 : null,
           ),
         );
       }

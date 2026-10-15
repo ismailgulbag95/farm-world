@@ -136,5 +136,59 @@ void main() {
 
       expect(find.textContaining('H01'), findsWidgets);
     });
+
+    test('H01, H02, T01, T05, T06, T15, and I07 are recognized as permissionGate with runtime connections', () {
+      expect(
+        TechTreeCatalog.byId('H01')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('H02')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('T01')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('T05')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('T06')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('T15')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+      expect(
+        TechTreeCatalog.byId('I07')!.implementationStatus,
+        equals(TechNodeImplementationStatus.permissionGate),
+      );
+
+      // Verify H01 unlocks mower in session
+      final session = OpeningSession();
+      expect(session.isScytheStage, isTrue);
+      expect(session.hasMower, isFalse);
+
+      session.unlockTechnology('H01');
+      expect(session.hasMower, isTrue);
+      expect(session.isMowerStage, isTrue);
+
+      // Verify H02 unlocks worker and transitions to management
+      session.unlockTechnology('H02');
+      expect(session.hasWorker, isTrue);
+      expect(session.isManagementStage, isTrue);
+      expect(session.hasOwnedInitialPlot, isTrue);
+
+      // Verify I07 gates southern hemisphere unlock
+      session.addCredits(50000);
+      expect(session.canUnlockSouthernHemisphere, isFalse); // I07 not yet researched
+      session.unlockTechnology('I07');
+      expect(session.canUnlockSouthernHemisphere, isTrue);
+      expect(session.unlockSouthernHemisphere(), isTrue);
+      expect(session.canUnlockSouthernHemisphere, isFalse); // already unlocked
+    });
   });
 }

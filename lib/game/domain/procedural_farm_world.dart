@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show Rect;
 
 /// World-map scale. A chunk is generated independently, so camera travel does
 /// not depend on a preallocated world rectangle.
@@ -319,6 +320,32 @@ class ProceduralFarmWorld {
   static const int chunksPerDistrict = 8;
   static const double districtSize = farmWorldChunkSize * chunksPerDistrict;
 
+  /// Finite world bounds for optimized performance and memory safety.
+  /// 27x27 chunks (~17.28 km x 17.28 km) provides a vast area (3x original map)
+  /// for exploration, trade routes, and farm expansion.
+  static const int minChunkX = -13;
+  static const int maxChunkX = 13;
+  static const int minChunkY = -13;
+  static const int maxChunkY = 13;
+
+  static const double worldMinX = minChunkX * farmWorldChunkSize;
+  static const double worldMaxX = (maxChunkX + 1) * farmWorldChunkSize;
+  static const double worldMinY = minChunkY * farmWorldChunkSize;
+  static const double worldMaxY = (maxChunkY + 1) * farmWorldChunkSize;
+
+  static const Rect worldBounds = Rect.fromLTRB(
+    worldMinX,
+    worldMinY,
+    worldMaxX,
+    worldMaxY,
+  );
+
+  static bool isChunkInBounds(int chunkX, int chunkY) =>
+      chunkX >= minChunkX &&
+      chunkX <= maxChunkX &&
+      chunkY >= minChunkY &&
+      chunkY <= maxChunkY;
+
   final int seed;
   final int generationVersion;
   final Map<String, WorldMapChunk> _chunkCache = {};
@@ -327,6 +354,18 @@ class ProceduralFarmWorld {
   final Map<String, List<WorldMapMountain>> _mountainCache = {};
 
   WorldMapChunk chunkAt(int chunkX, int chunkY) {
+    if (!isChunkInBounds(chunkX, chunkY)) {
+      return WorldMapChunk(
+        x: chunkX,
+        y: chunkY,
+        parcels: const [],
+        trees: const [],
+        pointsOfInterest: const [],
+        ponds: const [],
+        mountains: const [],
+      );
+    }
+
     final key = '$chunkX:$chunkY';
     final cached = _chunkCache[key];
     if (cached != null) return cached;

@@ -164,52 +164,89 @@ abstract final class TechTreeCatalog {
   /// or route permission. Building permission does not imply that a building
   /// has a complete production simulation; those limitations are called out.
   static const Map<String, String> _permissionGateEffects = {
+    'H01': 'Mini biçerdöver ekipmanını ve mekanik hasat yeteneğini açar.',
+    'H02': 'Tarla üretim ekibini (işçi) istihdam etme ve görev atama yetkisini açar.',
     'H03': 'Mağazada 1. kademeden yüksek, hasat dışı tarla ekipmanlarını açar.',
     'H06': 'Mağazada 1. kademeden yüksek hasat ekipmanlarını açar.',
-    'T04': 'Sera yapısını inşa etme izni verir. Sera için ürün yetiştirme çevrimi bağlı değildir.',
+    'T01':
+        'Parsellerde mahsul ekimi ve ürün yetiştirme döngüsünü açar; tüm tarımsal ekin araştırmalarının temelidir.',
+    'T04':
+        'Sera yapısını inşa etme izni verir. Sera için ürün yetiştirme çevrimi bağlı değildir.',
+    'T05':
+        'Yağlı tohum ürün ailesi araştırma iznini açar; ayçiçeği (T13/CR03) araştırmasının ön koşuludur.',
+    'T06':
+        'Kök ve yumru ürün ailesi araştırma iznini açar; patates (T14/CR04) araştırmasının ön koşuludur.',
     'T09': 'Meyve bahçesi inşa izninin ilk koşuludur; T12 de gereklidir.',
     'T12': 'Meyve bahçesi inşa izninin ikinci koşuludur; T09 da gereklidir.',
     'T13': 'Ayçiçeği ekim izni verir.',
     'T14': 'Patates ekim izni verir.',
+    'T15':
+        'Baklagil ürün ailesi araştırma iznini açar; nohut (T16/CR05) araştırmasının ön koşuludur.',
     'T16': 'Nohut ekim izni verir.',
-    'CR01': 'Buğday unu tarifi için ürün araştırma izni verir; çalışan değirmen de gerekir.',
-    'CR02': 'Mısır unu tarifi için ürün araştırma izni verir; çalışan değirmen de gerekir.',
-    'CR03': 'Ayçiçeği yağı tarifi için ürün araştırma izni verir; çalışan pres de gerekir. Ekim izni T13 ile açılır.',
-    'CR04': 'Patates nişastası ve paketlenmiş patates tarifleri için ürün araştırma izni verir; uygun tesis gerekir. Ekim izni T14 ile açılır.',
-    'CR05': 'Nohut unu tarifi için ürün araştırma izni verir; çalışan tesis de gerekir. Ekim izni T16 ile açılır.',
+    'CR01':
+        'Buğday unu tarifi için ürün araştırma izni verir; çalışan değirmen de gerekir.',
+    'CR02':
+        'Mısır unu tarifi için ürün araştırma izni verir; çalışan değirmen de gerekir.',
+    'CR03':
+        'Ayçiçeği yağı tarifi için ürün araştırma izni verir; çalışan pres de gerekir. Ekim izni T13 ile açılır.',
+    'CR04':
+        'Patates nişastası ve paketlenmiş patates tarifleri için ürün araştırma izni verir; uygun tesis gerekir. Ekim izni T14 ile açılır.',
+    'CR05':
+        'Nohut unu tarifi için ürün araştırma izni verir; çalışan tesis de gerekir. Ekim izni T16 ile açılır.',
     'PR01': 'Mısır unu değirmenini inşa etme izni verir.',
     'PR05': 'Ayçiçeği yağı presini inşa etme izni verir.',
     'PR06': 'Patates nişastası tesisini inşa etme izni verir.',
     'PR12': 'Nohut unu tesisini inşa etme izni verir.',
     'PR13': 'Buğday değirmenini inşa etme izni verir.',
-    'PR19': 'Şeker fabrikasını inşa etme izni verir; fabrikaya üretim tarifi bağlı değildir.',
-    'PR23': 'Sebze paketleme merkezini inşa etme izni verir; şu anda yalnız paketlenmiş patates tarifi bağlıdır.',
-    'PR41': 'Kök ve yumru tesisini inşa etme izni verir; şu anda patates nişastası tarifi bağlıdır.',
-    'PR43': 'Tropik ürün fabrikasını inşa etme izni verir; üretim tarifi bağlı değildir.',
-    'L01': 'Orta sınıf kamyonu satın alma ve rotalarda ürün/miktar seçme izni verir.',
+    'PR19':
+        'Şeker fabrikasını inşa etme izni verir; fabrikaya üretim tarifi bağlı değildir.',
+    'PR23':
+        'Sebze paketleme merkezini inşa etme izni verir; şu anda yalnız paketlenmiş patates tarifi bağlıdır.',
+    'PR41':
+        'Kök ve yumru tesisini inşa etme izni verir; şu anda patates nişastası tarifi bağlıdır.',
+    'PR43':
+        'Tropik ürün fabrikasını inşa etme izni verir; üretim tarifi bağlı değildir.',
+    'L01':
+        'Orta sınıf kamyonu satın alma ve rotalarda ürün/miktar seçme izni verir.',
     'L04': 'Taşıma rotasını tekrarlı çalışacak şekilde ayarlama izni verir.',
     'L06': 'Hafif ekspres kamyonu satın alma izni verir.',
     'L07': 'Ağır nakliye kamyonu ve tırını satın alma izni verir.',
     'L08': 'Soğutuculu kamyonu satın alma izni verir.',
     'L11': 'Hafif platform dorse dahil dorse satın alma izni verir.',
-    'L12': 'Dökme tahıl ve bölgesel yol treni taşıtlarını satın alma izni verir.',
+    'L12':
+        'Dökme tahıl ve bölgesel yol treni taşıtlarını satın alma izni verir.',
     'L13': 'Soğutuculu dorseyi satın alma izni verir.',
     'L15': 'Toplu yükleme yapısını ve çoklu aks dorsesini açar.',
     'S01': 'Çiftlik deposunu inşa etme izni verir; depo kapasite ekler.',
-    'S06': 'Kontrollü atmosfer deposunu inşa etme izni verir; depo ürün bozulmasını yavaşlatır.',
+    'S06':
+        'Kontrollü atmosfer deposunu inşa etme izni verir; depo ürün bozulmasını yavaşlatır.',
     'S08': 'Tohum ambarını inşa etme izni verir.',
-    'S10': 'Tahıl silosunu inşa etme izni verir; silo kapasite ekler ve bozulmayı yavaşlatır.',
-    'S11': 'Soğuk odayı inşa etme izni verir; oda kapasite ekler ve bozulmayı yavaşlatır.',
-    'S13': 'Uzun dönemli depoyu inşa etme izni verir; depo kapasite ekler ve bozulmayı yavaşlatır.',
-    'I02': 'Bölgesel aktarma merkezini inşa etme izni verir; kurulu merkez lojistik hızına bonus sağlar.',
-    'LV01': 'Tavuk kümesini inşa etmeyi açar; kümes kurulduğunda tavuk ve yumurta sistemi çalışır.',
-    'LV05': 'Keçi çiftliğini inşa etme izni verir; bağımsız keçi yetiştirme sistemi bağlı değildir.',
-    'LV06': 'Arı kovanlığını inşa etme izni verir; bağımsız arıcılık sistemi bağlı değildir.',
-    'LV07': 'Koyun çiftliğini inşa etme izni verir; bağımsız koyun yetiştirme sistemi bağlı değildir.',
-    'LV08': 'Süt sığırı çiftliğini inşa etme izni verir; bağımsız süt sığırı sistemi bağlı değildir.',
-    'LV10': 'Yem silosunu inşa etme izni verir; mevcut yem stokuna kapasite etkisi bağlı değildir.',
-    'LV11': 'Karma yem fabrikasını inşa etme izni verir; yem üretim tarifi bağlı değildir.',
-    'LV13': 'Veteriner kliniğini inşa etme izni verir; veteriner etkileşimleri bağlı değildir.',
+    'S10':
+        'Tahıl silosunu inşa etme izni verir; silo kapasite ekler ve bozulmayı yavaşlatır.',
+    'S11':
+        'Soğuk odayı inşa etme izni verir; oda kapasite ekler ve bozulmayı yavaşlatır.',
+    'S13':
+        'Uzun dönemli depoyu inşa etme izni verir; depo kapasite ekler ve bozulmayı yavaşlatır.',
+    'I02':
+        'Bölgesel aktarma merkezini inşa etme izni verir; kurulu merkez lojistik hızına bonus sağlar.',
+    'I07':
+        'Güney yarımkürede operasyon bölgesi açma ve arazi edinme izni verir.',
+    'LV01':
+        'Tavuk kümesini inşa etmeyi açar; kümes kurulduğunda tavuk ve yumurta sistemi çalışır.',
+    'LV05':
+        'Keçi çiftliğini inşa etme izni verir; bağımsız keçi yetiştirme sistemi bağlı değildir.',
+    'LV06':
+        'Arı kovanlığını inşa etme izni verir; bağımsız arıcılık sistemi bağlı değildir.',
+    'LV07':
+        'Koyun çiftliğini inşa etme izni verir; bağımsız koyun yetiştirme sistemi bağlı değildir.',
+    'LV08':
+        'Süt sığırı çiftliğini inşa etme izni verir; bağımsız süt sığırı sistemi bağlı değildir.',
+    'LV10':
+        'Yem silosunu inşa etme izni verir; mevcut yem stokuna kapasite etkisi bağlı değildir.',
+    'LV11':
+        'Karma yem fabrikasını inşa etme izni verir; yem üretim tarifi bağlı değildir.',
+    'LV13':
+        'Veteriner kliniğini inşa etme izni verir; veteriner etkileşimleri bağlı değildir.',
   };
 
   static final Map<String, Set<String>> _dependentTechnologyIds =

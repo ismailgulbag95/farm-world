@@ -32,6 +32,7 @@ class CropPlotState {
     this.nextGrassCutAt,
     this.activeJob,
     this.cropGrowthDurationOverrideSeconds,
+    this.hasOrganicCompostBonus = false,
   });
 
   final int id;
@@ -58,6 +59,7 @@ class CropPlotState {
   final DateTime? nextGrassCutAt;
   final FarmOperationJob? activeJob;
   final int? cropGrowthDurationOverrideSeconds;
+  final bool hasOrganicCompostBonus;
 
   bool get hasActiveCrop =>
       activeCropId != null &&
@@ -68,6 +70,9 @@ class CropPlotState {
 
   double get soilYieldMultiplier =>
       0.90 + (soilConditionPoints.clamp(0, 100) / 1000.0);
+
+  /// 40% yield boost from organic compost treatment.
+  double get compostYieldMultiplier => hasOrganicCompostBonus ? 1.40 : 1.0;
 
   double suitabilityForCrop(String cropId) {
     if (use == CropPlotUse.pasture) return 0.80;
@@ -116,6 +121,7 @@ class CropPlotState {
     bool clearActiveJob = false,
     int? cropGrowthDurationOverrideSeconds,
     bool clearCropGrowthDurationOverride = false,
+    bool? hasOrganicCompostBonus,
   }) {
     return CropPlotState(
       id: id ?? this.id,
@@ -146,6 +152,8 @@ class CropPlotState {
           ? null
           : cropGrowthDurationOverrideSeconds ??
                 this.cropGrowthDurationOverrideSeconds,
+      hasOrganicCompostBonus:
+          hasOrganicCompostBonus ?? this.hasOrganicCompostBonus,
     );
   }
 
@@ -179,6 +187,7 @@ class CropPlotState {
     if (activeJob != null) 'activeJob': activeJob!.toJson(),
     if (cropGrowthDurationOverrideSeconds != null)
       'cropGrowthDurationOverrideSeconds': cropGrowthDurationOverrideSeconds,
+    'hasOrganicCompostBonus': hasOrganicCompostBonus,
   };
 
   factory CropPlotState.fromJson(Map<String, dynamic> json) {
@@ -222,6 +231,8 @@ class CropPlotState {
           : null,
       cropGrowthDurationOverrideSeconds:
           json['cropGrowthDurationOverrideSeconds'] as int?,
+      hasOrganicCompostBonus:
+          json['hasOrganicCompostBonus'] as bool? ?? false,
     );
   }
 
@@ -276,7 +287,8 @@ class CropPlotState {
           soilYieldMultiplier *
           suitabilityForCrop(activeCropId!) *
           rotationYieldMultiplierFor(activeCropId!) *
-          seasonalYieldMultiplier,
+          seasonalYieldMultiplier *
+          compostYieldMultiplier,
     );
   }
 
@@ -308,7 +320,8 @@ class CropPlotState {
           other.nextGrassCutAt == nextGrassCutAt &&
           other.activeJob == activeJob &&
           other.cropGrowthDurationOverrideSeconds ==
-              cropGrowthDurationOverrideSeconds;
+              cropGrowthDurationOverrideSeconds &&
+          other.hasOrganicCompostBonus == hasOrganicCompostBonus;
 
   @override
   int get hashCode => Object.hashAll([
@@ -336,6 +349,7 @@ class CropPlotState {
     nextGrassCutAt,
     activeJob,
     cropGrowthDurationOverrideSeconds,
+    hasOrganicCompostBonus,
   ]);
 }
 
@@ -346,4 +360,87 @@ bool _cropFamilyListsEqual(List<CropFamily> left, List<CropFamily> right) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+/// Converts mowed grass bales and farm biomass into organic compost fertilizer.
+class CompostFacility {
+  CompostFacility({
+    this.biomassStock = 0.0,
+    this.maxBiomassCapacity = 500.0,
+    this.readyCompostBags = 0,
+    this.maxCompostCapacity = 50,
+    this.fermentationProgress = 0.0,
+  });
+
+  double biomassStock;
+  double maxBiomassCapacity;
+  int readyCompostBags;
+  int maxCompostCapacity;
+  double fermentationProgress;
+
+  double get remainingBiomassCapacity =>
+      (maxBiomassCapacity - biomassStock).clamp(0.0, maxBiomassCapacity);
+  int get remainingCompostCapacity =>
+      (maxCompostCapacity - readyCompostBags).clamp(0, maxCompostCapacity);
+
+  bool addGrassBales(int baleCount) {
+    if (baleCount <= 0 || remainingBiomassCapacity <= 0) return false;
+    final added = (baleCount * 25.0).clamp(0.0, remainingBiomassCapacity);
+    biomassStock += added;
+    return true;
+  }
+
+  bool addManure(double amount) {
+    if (amount <= 0 || remainingBiomassCapacity <= 0) return false;
+    final added = amount.clamp(0.0, remainingBiomassCapacity);
+    biomassStock += added;
+    return true;
+  }
+
+  int takeCompost(int amount) {
+    if (amount <= 0 || readyCompostBags <= 0) return 0;
+    final taken = readyCompostBags < amount ? readyCompostBags : amount;
+    readyCompostBags -= taken;
+    return taken;
+  }
+
+  void update(double dtSeconds) {
+    if (biomassStock <= 0 || remainingCompostCapacity <= 0 || dtSeconds <= 0) {
+      return;
+    }
+    // Produces 1 bag every 30 seconds if biomass is available (costs 20 biomass per bag)
+    final progressStep = dtSeconds / 30.0;
+    fermentationProgress += progressStep;
+    final completedBags = fermentationProgress.floor();
+    if (completedBags > 0) {
+      final possibleByBiomass = (biomassStock / 20.0).floor();
+      final toProduce = completedBags < possibleByBiomass
+          ? (completedBags < remainingCompostCapacity ? completedBags : remainingCompostCapacity)
+          : (possibleByBiomass < remainingCompostCapacity ? possibleByBiomass : remainingCompostCapacity);
+      if (toProduce > 0) {
+        biomassStock = (biomassStock - (toProduce * 20.0)).clamp(0.0, maxBiomassCapacity);
+        readyCompostBags += toProduce;
+      }
+      fermentationProgress -= completedBags;
+    }
+  }
+
+  Map<String, dynamic> toJson() => {
+    'biomassStock': biomassStock,
+    'maxBiomassCapacity': maxBiomassCapacity,
+    'readyCompostBags': readyCompostBags,
+    'maxCompostCapacity': maxCompostCapacity,
+    'fermentationProgress': fermentationProgress,
+  };
+
+  factory CompostFacility.fromJson(Map<String, dynamic> json) =>
+      CompostFacility(
+        biomassStock: (json['biomassStock'] as num?)?.toDouble() ?? 0.0,
+        maxBiomassCapacity:
+            (json['maxBiomassCapacity'] as num?)?.toDouble() ?? 500.0,
+        readyCompostBags: json['readyCompostBags'] as int? ?? 0,
+        maxCompostCapacity: json['maxCompostCapacity'] as int? ?? 50,
+        fermentationProgress:
+            (json['fermentationProgress'] as num?)?.toDouble() ?? 0.0,
+      );
 }

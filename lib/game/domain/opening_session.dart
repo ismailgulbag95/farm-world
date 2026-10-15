@@ -22,6 +22,8 @@ import 'farm_building.dart';
 import 'market_price_simulator.dart';
 import 'delivery_contracts.dart';
 import 'audio_controller.dart';
+import 'farm_progression_and_finance.dart';
+import 'farm_ledger.dart';
 
 /// Lifecycle stages of the opening gameplay hook.
 enum OpeningStage {
@@ -670,6 +672,27 @@ class OpeningSession {
     coop = savedSystems['coop'] is Map<String, dynamic>
         ? ChickenCoop.fromJson(savedSystems['coop'] as Map<String, dynamic>)
         : ChickenCoop();
+    pasture = savedSystems['pasture'] is Map<String, dynamic>
+        ? LivestockPasture.fromJson(
+            savedSystems['pasture'] as Map<String, dynamic>,
+          )
+        : LivestockPasture();
+    compostFacility = savedSystems['compostFacility'] is Map<String, dynamic>
+        ? CompostFacility.fromJson(
+            savedSystems['compostFacility'] as Map<String, dynamic>,
+          )
+        : CompostFacility();
+    if (savedSystems['equipmentMaintenance'] is Map<String, dynamic>) {
+      final maintMap =
+          savedSystems['equipmentMaintenance'] as Map<String, dynamic>;
+      for (final entry in maintMap.entries) {
+        if (entry.value is Map<String, dynamic>) {
+          equipmentMaintenance[entry.key] = EquipmentMaintenanceState.fromJson(
+            entry.value as Map<String, dynamic>,
+          );
+        }
+      }
+    }
     marketPrices = savedSystems['market'] is Map<String, dynamic>
         ? MarketPriceSimulator.fromJson(
             savedSystems['market'] as Map<String, dynamic>,
@@ -680,6 +703,33 @@ class OpeningSession {
             savedSystems['contracts'] as Map<String, dynamic>,
           )
         : DeliveryContractManager();
+    prestigeManager = savedSystems['prestige'] is Map<String, dynamic>
+        ? FarmPrestigeManager.fromJson(
+            savedSystems['prestige'] as Map<String, dynamic>,
+          )
+        : FarmPrestigeManager(
+            lifetimeEvidence: _state.lifetimeProductionEvidence,
+          );
+    workerSpecialization =
+        savedSystems['workerSpecialization'] is Map<String, dynamic>
+        ? WorkerTeamSpecialization.fromJson(
+            savedSystems['workerSpecialization'] as Map<String, dynamic>,
+          )
+        : WorkerTeamSpecialization();
+    questAndBadgeManager =
+        savedSystems['questsAndBadges'] is Map<String, dynamic>
+        ? QuestAndBadgeManager.fromJson(
+            savedSystems['questsAndBadges'] as Map<String, dynamic>,
+          )
+        : QuestAndBadgeManager();
+    financeManager = savedSystems['finance'] is Map<String, dynamic>
+        ? FarmFinanceManager.fromJson(
+            savedSystems['finance'] as Map<String, dynamic>,
+          )
+        : FarmFinanceManager();
+    ledger = savedSystems['ledger'] is Map<String, dynamic>
+        ? FarmLedger.fromJson(savedSystems['ledger'] as Map<String, dynamic>)
+        : FarmLedger();
     _buildingProductionProgress =
         (savedSystems['buildingProductionProgress'] as Map<String, dynamic>? ??
                 const <String, dynamic>{})
@@ -749,9 +799,33 @@ class OpeningSession {
   /// Poultry livestock coop managing hens, grain feeding and egg yields.
   late final ChickenCoop coop;
 
+  /// Pasture managing dairy cows, sheep, grazing, milk and wool production.
+  late final LivestockPasture pasture;
+
+  /// Organic compost facility converting mowed grass and biomass into yield-boosting fertilizer.
+  late final CompostFacility compostFacility;
+
+  /// Machinery fuel and maintenance tracking.
+  final Map<String, EquipmentMaintenanceState> equipmentMaintenance = {};
+
   late final MarketPriceSimulator marketPrices;
 
   late final DeliveryContractManager contractManager;
+
+  /// Farm prestige levels and titles.
+  late final FarmPrestigeManager prestigeManager;
+
+  /// Worker team specialization perk points and skills.
+  late final WorkerTeamSpecialization workerSpecialization;
+
+  /// Daily goals and achievement badges.
+  late final QuestAndBadgeManager questAndBadgeManager;
+
+  /// Bank loans and government agricultural grants.
+  late final FarmFinanceManager financeManager;
+
+  /// Recent income and expense events for the analytics panel.
+  late final FarmLedger ledger;
 
   /// Multi-hemisphere planetary territory expansion manager.
   final TerritoryExpansionManager territoryManager =
@@ -766,6 +840,16 @@ class OpeningSession {
   Map<String, dynamic> _farmSystemsToJson() => {
     'plantManager': plantManager.toJson(),
     'coop': coop.toJson(),
+    'pasture': pasture.toJson(),
+    'compostFacility': compostFacility.toJson(),
+    'equipmentMaintenance': equipmentMaintenance.map(
+      (k, v) => MapEntry(k, v.toJson()),
+    ),
+    'prestige': prestigeManager.toJson(),
+    'workerSpecialization': workerSpecialization.toJson(),
+    'questsAndBadges': questAndBadgeManager.toJson(),
+    'finance': financeManager.toJson(),
+    'ledger': ledger.toJson(),
     'market': marketPrices.toJson(),
     'contracts': contractManager.toJson(),
     'buildingProductionProgress': _buildingProductionProgress,
@@ -838,6 +922,10 @@ class OpeningSession {
     _state = _state.copyWith(
       farmCredits: _state.farmCredits - type.purchaseCostCredits,
     );
+    ledger.recordExpense(
+      amount: type.purchaseCostCredits,
+      label: '${type.name} kamyon alımı',
+    );
     return true;
   }
 
@@ -858,6 +946,10 @@ class OpeningSession {
     if (!fleetManager.purchaseTrailer(type, vehicleId)) return false;
     _state = _state.copyWith(
       farmCredits: _state.farmCredits - type.purchaseCostCredits,
+    );
+    ledger.recordExpense(
+      amount: type.purchaseCostCredits,
+      label: '${type.name} römork alımı',
     );
     return true;
   }
@@ -1057,6 +1149,7 @@ class OpeningSession {
       farmCredits: _state.farmCredits - price,
       ownedEquipmentIds: {..._state.ownedEquipmentIds, equipmentId},
     );
+    ledger.recordExpense(amount: price, label: '${item.name} ekipman alımı');
     return true;
   }
 
@@ -1097,6 +1190,7 @@ class OpeningSession {
       ownedEquipmentIds: owned,
       equippedEquipmentByOperation: equipped,
     );
+    ledger.recordExpense(amount: bundlePrice, label: 'Ekipman paketi');
     return true;
   }
 
@@ -1574,6 +1668,12 @@ class OpeningSession {
       lifetimeProductionEvidence:
           _state.lifetimeProductionEvidence + baleLifetimeProductionEvidence,
     );
+    ledger.recordIncome(
+      amount: baleSaleRewardCredits,
+      label: 'Ot balyası satışı',
+      itemId: 'grass_bale',
+      quantity: 1,
+    );
     return true;
   }
 
@@ -1598,13 +1698,26 @@ class OpeningSession {
           _state.lifetimeProductionEvidence +
           (count * baleLifetimeProductionEvidence),
     );
+    ledger.recordIncome(
+      amount: reward,
+      label: 'Ot balyası satışı',
+      itemId: 'grass_bale',
+      quantity: count,
+    );
     return count;
   }
 
-  /// Adds farm credits directly (e.g. from quests, deliveries or external sales).
-  void addCredits(int amount) {
-    if (amount <= 0) return;
+  /// Applies a direct credit adjustment and records it in the finance ledger.
+  /// Positive adjustments are income; negative adjustments are expenses.
+  void addCredits(int amount, {bool recordLedger = true}) {
+    if (amount == 0) return;
     _state = _state.copyWith(farmCredits: _state.farmCredits + amount);
+    if (!recordLedger) return;
+    if (amount > 0) {
+      ledger.recordIncome(amount: amount, label: 'Diğer gelir');
+    } else {
+      ledger.recordExpense(amount: -amount, label: 'Teknoloji yatırımı');
+    }
   }
 
   /// Directly collects a newly cut bale into the player's backpack stack.
@@ -1626,6 +1739,7 @@ class OpeningSession {
       capacityLevel: _state.capacityLevel + 1,
       backpackCapacity: _state.backpackCapacity + 10,
     );
+    ledger.recordExpense(amount: cost, label: 'Çanta kapasitesi yükseltmesi');
     return true;
   }
 
@@ -1637,6 +1751,7 @@ class OpeningSession {
       farmCredits: _state.farmCredits - cost,
       speedLevel: _state.speedLevel + 1,
     );
+    ledger.recordExpense(amount: cost, label: 'Hız yükseltmesi');
     return true;
   }
 
@@ -1648,6 +1763,7 @@ class OpeningSession {
       farmCredits: _state.farmCredits - cost,
       rangeLevel: _state.rangeLevel + 1,
     );
+    ledger.recordExpense(amount: cost, label: 'Biçme menzili yükseltmesi');
     return true;
   }
 
@@ -1667,6 +1783,7 @@ class OpeningSession {
       hasMower: true,
       stage: OpeningStage.mower,
     );
+    ledger.recordExpense(amount: mowerCost, label: 'Mini biçer alımı');
     return true;
   }
 
@@ -1689,27 +1806,81 @@ class OpeningSession {
           ? true
           : _state.automaticSoilCareEnabled,
     );
+    ledger.recordExpense(
+      amount: OpeningCropCatalog.c2TechnologyCostCredits,
+      label: 'Teknoloji araştırması',
+      itemId: technologyId,
+    );
     AudioController.instance.playEffect(SoundEffect.techUnlock);
     return true;
   }
 
   /// Registers an unlocked technology node from the comprehensive tech tree.
   void unlockTechnology(String technologyId) {
+    final unlocksMower = technologyId == 'H01' && !_state.hasMower;
+    final unlocksWorker = technologyId == 'H02' && !_state.hasWorker;
+
     _state = _state.copyWith(
       purchasedTechnologyIds: {..._state.purchasedTechnologyIds, technologyId},
       automaticSoilCareEnabled: technologyId == soilCareTechnologyId
           ? true
           : _state.automaticSoilCareEnabled,
+      hasMower: unlocksMower ? true : _state.hasMower,
+      stage: unlocksMower && _state.stage == OpeningStage.scythe
+          ? OpeningStage.mower
+          : (unlocksWorker && _state.stage != OpeningStage.management
+              ? OpeningStage.management
+              : _state.stage),
+      hasWorker: unlocksWorker ? true : _state.hasWorker,
+      isMowerAssignedToWorker:
+          unlocksWorker ? true : _state.isMowerAssignedToWorker,
+      hasOwnedInitialPlot:
+          unlocksWorker ? true : _state.hasOwnedInitialPlot,
+      freeInitialSeedsCount: unlocksWorker
+          ? max(_state.freeInitialSeedsCount, 1)
+          : _state.freeInitialSeedsCount,
+    );
+
+    if (unlocksWorker) {
+      grantStarterEquipmentOnce();
+    }
+    if (technologyId == soilCareTechnologyId && _state.automaticSoilCareEnabled) {
+      _tryAutomaticSoilCare();
+    }
+  }
+
+  /// Checks whether South Hemisphere territory expansion is permitted and affordable.
+  /// Requires 'I07' research gate per docs/decisions/2026-10-11-i07-hemisphere-access.md.
+  bool get canUnlockSouthernHemisphere =>
+      hasResearch('I07') &&
+      territoryManager.canUnlockSouthernHemisphere(_state.farmCredits);
+
+  /// Unlocks the South Hemisphere operating territory using 'I07' permission.
+  bool unlockSouthernHemisphere() {
+    if (!canUnlockSouthernHemisphere) return false;
+    return territoryManager.unlockSouthernHemisphere(
+      pay: (cost) {
+        if (_state.farmCredits < cost) return false;
+        _state = _state.copyWith(farmCredits: _state.farmCredits - cost);
+        ledger.recordExpense(
+          amount: cost,
+          label: 'Güney Yarımküre erişim bedeli',
+          itemId: 'I07',
+        );
+        return true;
+      },
     );
   }
 
   /// Adds the research-only budget once so a tree-only session can explore every branch.
   void grantStandaloneResearchBudgetOnce(int amount) {
     if (_state.hasStandaloneResearchBudget) return;
+    final budget = max(0, amount);
     _state = _state.copyWith(
-      farmCredits: _state.farmCredits + max(0, amount),
+      farmCredits: _state.farmCredits + budget,
       hasStandaloneResearchBudget: true,
     );
+    ledger.recordIncome(amount: budget, label: 'Araştırma bütçesi');
   }
 
   /// Changes T02's automatic soil-care setting. Enabling it immediately tries
@@ -1733,6 +1904,7 @@ class OpeningSession {
     }
 
     var credits = _state.farmCredits;
+    var totalCharged = 0;
     final currentPlots = List<CropPlotState>.from(plots);
     var plotsChanged = false;
     final nowUtc = (now ?? DateTime.now()).toUtc();
@@ -1752,6 +1924,7 @@ class OpeningSession {
       );
       if (credits < cost) continue;
       credits -= cost;
+      totalCharged += cost;
       final soilAfter = min(
         soilConditionMaximumPoints,
         plot.soilConditionPoints + soilCareRestoredPoints,
@@ -1768,6 +1941,11 @@ class OpeningSession {
     }
     if (plotsChanged) {
       _state = _state.copyWith(farmCredits: credits, plots: currentPlots);
+      ledger.recordExpense(
+        amount: totalCharged,
+        label: 'Otomatik gübreleme',
+        at: nowUtc,
+      );
     }
   }
 
@@ -1794,6 +1972,7 @@ class OpeningSession {
       hasOwnedInitialPlot: true,
       freeInitialSeedsCount: 1,
     );
+    ledger.recordExpense(amount: workerCost, label: 'İşçi işe alımı');
     grantStarterEquipmentOnce();
     return true;
   }
@@ -1875,16 +2054,23 @@ class OpeningSession {
     if (_state.firstSuccessfulPlantingAt == null) {
       if (!recordFirstSuccessfulPlanting(effectivePlantingAt)) return false;
     } else {
+      final seedCost = usesFreeSeed
+          ? 0
+          : OpeningCropCatalog.byId(cropId)!.seedCostCredits;
       _state = _state.copyWith(
-        farmCredits:
-            _state.farmCredits -
-            (usesFreeSeed
-                ? 0
-                : OpeningCropCatalog.byId(cropId)!.seedCostCredits),
+        farmCredits: _state.farmCredits - seedCost,
         freeInitialSeedsCount: usesFreeSeed
             ? _state.freeInitialSeedsCount - 1
             : _state.freeInitialSeedsCount,
       );
+      if (seedCost > 0) {
+        ledger.recordExpense(
+          amount: seedCost,
+          label: 'Tohum alımı',
+          itemId: cropId,
+          quantity: 1,
+        );
+      }
     }
 
     _state = _state.copyWith(
@@ -1934,15 +2120,17 @@ class OpeningSession {
     final newSoil = isFullCropHarvest && _state.soilConditionPoints > 0
         ? _state.soilConditionPoints - 1
         : _state.soilConditionPoints;
-    final updatedPlots = plots.map((p) {
-      if (p.id == starterPlotId) {
-        return p.copyWith(
-          soilConditionPoints: newSoil,
-          hasHarvestedActiveCrop: true,
-        );
-      }
-      return p;
-    }).toList(growable: false);
+    final updatedPlots = plots
+        .map((p) {
+          if (p.id == starterPlotId) {
+            return p.copyWith(
+              soilConditionPoints: newSoil,
+              hasHarvestedActiveCrop: true,
+            );
+          }
+          return p;
+        })
+        .toList(growable: false);
     _state = _state.copyWith(
       lifetimeProductionEvidence:
           _state.lifetimeProductionEvidence + harvestValue,
@@ -2208,6 +2396,11 @@ class OpeningSession {
       plots: currentPlots,
       buildings: [..._state.buildings, building],
     );
+    ledger.recordExpense(
+      amount: definition.constructionCostCredits,
+      label: '${definition.name} inşaatı',
+      at: startedAt,
+    );
     return true;
   }
 
@@ -2217,6 +2410,7 @@ class OpeningSession {
     final nowUtc = now.toUtc();
     var credits = _state.farmCredits;
     var changed = false;
+    var totalCharged = 0;
     final nextBuildings = <FarmBuildingInstance>[];
     for (final building in _state.buildings) {
       final definition = FarmBuildingCatalog.byId(building.definitionId);
@@ -2239,6 +2433,7 @@ class OpeningSession {
               .clamp(0, duePeriods)
               .toInt();
       credits -= affordablePeriods * definition.dailyOperatingCostCredits;
+      totalCharged += affordablePeriods * definition.dailyOperatingCostCredits;
       final lastPaidAt = building.lastOperatingChargeAt.toUtc().add(
         Duration(days: affordablePeriods),
       );
@@ -2253,6 +2448,11 @@ class OpeningSession {
     }
     if (!changed) return false;
     _state = _state.copyWith(farmCredits: credits, buildings: nextBuildings);
+    ledger.recordExpense(
+      amount: totalCharged,
+      label: 'Bina işletme gideri',
+      at: nowUtc,
+    );
     _syncOperationalBuildings(nowUtc);
     return true;
   }
@@ -2279,6 +2479,11 @@ class OpeningSession {
       farmCredits: _state.farmCredits - definition.dailyOperatingCostCredits,
       buildings: nextBuildings,
     );
+    ledger.recordExpense(
+      amount: definition.dailyOperatingCostCredits,
+      label: 'Bina işletme gideri',
+      at: (now ?? DateTime.now()).toUtc(),
+    );
     _syncOperationalBuildings((now ?? DateTime.now()).toUtc());
     return true;
   }
@@ -2300,6 +2505,7 @@ class OpeningSession {
       ownedWorldParcelIds: {..._state.ownedWorldParcelIds, parcel.id},
       plots: currentPlots,
     );
+    ledger.recordExpense(amount: parcel.price, label: 'Arazi alımı');
     AudioController.instance.playEffect(SoundEffect.purchaseParcel);
     return true;
   }
@@ -2381,6 +2587,7 @@ class OpeningSession {
       farmCredits: _state.farmCredits - link.cost,
       worldLogisticsLinks: [..._state.worldLogisticsLinks, link],
     );
+    ledger.recordExpense(amount: link.cost, label: 'Lojistik hattı kurulumu');
     return true;
   }
 
@@ -2613,6 +2820,10 @@ class OpeningSession {
       farmCredits: _state.farmCredits - plot.purchaseCostCredits,
       plots: currentPlots,
     );
+    ledger.recordExpense(
+      amount: plot.purchaseCostCredits,
+      label: 'Tarla alımı',
+    );
     return true;
   }
 
@@ -2715,6 +2926,7 @@ class OpeningSession {
       farmCredits: _state.farmCredits - cost,
       plots: currentPlots,
     );
+    ledger.recordExpense(amount: cost, label: '${job.operation.label} gideri');
     _activeFarmJobsByPlotId[plot.id] = job;
   }
 
@@ -3085,6 +3297,7 @@ class OpeningSession {
             recentCropFamilies: rotationHistory,
             clearCropGrowthDurationOverride: true,
             clearActiveJob: true,
+            hasOrganicCompostBonus: false,
           );
           if (plot.id == starterPlotId) {
             rootCropHarvested = true;
@@ -3103,6 +3316,13 @@ class OpeningSession {
             nextGrassCutAt: job.completesAt.add(pastureRegrowthDuration),
             clearActiveJob: true,
           );
+          AudioController.instance.playEffect(SoundEffect.baleDrop);
+      }
+
+      // Consumes fuel & adds mechanical wear
+      getEquipmentMaintenance(job.equipmentId).consumeOperation();
+      if (job.tractorEquipmentId != null) {
+        getEquipmentMaintenance(job.tractorEquipmentId!).consumeOperation();
       }
 
       if (plot.id == starterPlotId && job.tutorialFast) {
@@ -3164,6 +3384,15 @@ class OpeningSession {
       lifetimeProductionEvidence: _state.lifetimeProductionEvidence + saleValue,
       plots: currentPlots,
     );
+    ledger.recordIncome(
+      amount: saleValue,
+      label: 'Ot balyası satışı',
+      itemId: 'grass_bale',
+      quantity: bales,
+    );
+    AudioController.instance.playEffect(
+      saleValue >= 500 ? SoundEffect.largeSale : SoundEffect.coinEarned,
+    );
     return true;
   }
 
@@ -3185,6 +3414,7 @@ class OpeningSession {
       marketPrices.stepMarket(dtSeconds / 60.0);
     }
     _advanceContractOffers(nowUtc);
+    var contractCompleted = false;
     final earned = fleetManager.update(
       dtSeconds,
       unitPriceProvider: (itemId) =>
@@ -3201,17 +3431,39 @@ class OpeningSession {
             if (!identical(activeMarket, marketPrices)) {
               marketPrices.recordSale(itemId, amount);
             }
-            return contractManager.recordDelivery(
+            ledger.recordIncome(
+              amount: saleValue,
+              label: 'Pazar satışı',
+              itemId: itemId,
+              quantity: amount,
+              at: nowUtc,
+            );
+            final bonus = contractManager.recordDelivery(
               contractId: contractId,
               itemId: itemId,
               amount: amount,
               quality: quality,
               now: nowUtc,
             );
+            if (bonus > 0) {
+              contractCompleted = true;
+              ledger.recordIncome(
+                amount: bonus,
+                label: 'Sözleşme bonusu',
+                itemId: itemId,
+                at: nowUtc,
+              );
+            }
+            return bonus;
           },
     );
     if (earned > 0) {
-      addCredits(earned);
+      addCredits(earned, recordLedger: false);
+      if (earned >= 1000) {
+        AudioController.instance.playEffect(SoundEffect.largeSale);
+      } else if (contractCompleted) {
+        AudioController.instance.playEffect(SoundEffect.contractComplete);
+      }
       if (!_state.hasCompletedStarterTrade) {
         _state = _state.copyWith(
           hasCompletedStarterTrade: true,
@@ -3345,6 +3597,7 @@ class OpeningSession {
       return false;
     }
     _state = _state.copyWith(farmCredits: _state.farmCredits - cost);
+    ledger.recordExpense(amount: cost, label: 'Kamyon servisi');
     return true;
   }
 
@@ -3442,36 +3695,307 @@ class OpeningSession {
   bool advanceLivestock(double dtSeconds, {DateTime? now}) {
     if (_state.stage != OpeningStage.management || dtSeconds <= 0) return false;
     _syncOperationalBuildings((now ?? DateTime.now()).toUtc());
-    if (!coop.isUnlocked) return false;
-    final previousFeed = coop.feedStock;
-    final previousEggs = coop.eggStock;
-    if (coop.remainingFeedCapacity > 0 && coop.feedStock < 30) {
-      var feedNeeded = min(
-        coop.remainingFeedCapacity.floor(),
-        (30 - coop.feedStock).ceil(),
-      );
-      for (final grainId in [starterWheatId, starterMaizeId]) {
-        if (feedNeeded <= 0) break;
-        final withdrawn = _withdrawFromWarehouse(
-          grainId,
-          min(feedNeeded, warehouseAmountFor(grainId)),
+
+    var changed = false;
+
+    // 1. Tavukçuluk (Coop)
+    if (coop.isUnlocked) {
+      final previousFeed = coop.feedStock;
+      final previousEggs = coop.eggStock;
+      if (coop.remainingFeedCapacity > 0 && coop.feedStock < 30) {
+        var feedNeeded = min(
+          coop.remainingFeedCapacity.floor(),
+          (30 - coop.feedStock).ceil(),
         );
-        if (withdrawn > 0) {
-          coop.addFeed(withdrawn.toDouble());
-          feedNeeded -= withdrawn;
+        for (final grainId in [starterWheatId, starterMaizeId]) {
+          if (feedNeeded <= 0) break;
+          final withdrawn = _withdrawFromWarehouse(
+            grainId,
+            min(feedNeeded, warehouseAmountFor(grainId)),
+          );
+          if (withdrawn > 0) {
+            coop.addFeed(withdrawn.toDouble());
+            feedNeeded -= withdrawn;
+          }
         }
       }
+      coop.update(dtSeconds);
+      final storeCount = min(
+        coop.eggStock,
+        fleetManager.remainingWarehouseCapacity,
+      );
+      if (storeCount > 0) {
+        final eggs = coop.takeEggs(storeCount);
+        fleetManager.depositToWarehouse('fresh_eggs', eggs);
+      }
+      if (previousFeed != coop.feedStock || previousEggs != coop.eggStock) {
+        changed = true;
+      }
     }
-    coop.update(dtSeconds);
-    final storeCount = min(
-      coop.eggStock,
-      fleetManager.remainingWarehouseCapacity,
+
+    // 2. Gelişmiş Hayvancılık & Otlama (Pasture: İnekler ve Koyunlar)
+    if (pasture.isUnlocked) {
+      final prevMilk = pasture.milkStock;
+      final prevWool = pasture.woolStock;
+
+      if (!pasture.isPastureGrazingEnabled &&
+          pasture.remainingFeedCapacity > 0 &&
+          pasture.feedStock < 50) {
+        var feedNeeded = min(
+          pasture.remainingFeedCapacity.floor(),
+          (50 - pasture.feedStock).ceil(),
+        );
+        for (final grainId in [starterWheatId, starterMaizeId]) {
+          if (feedNeeded <= 0) break;
+          final withdrawn = _withdrawFromWarehouse(
+            grainId,
+            min(feedNeeded, warehouseAmountFor(grainId)),
+          );
+          if (withdrawn > 0) {
+            pasture.addFeed(withdrawn.toDouble());
+            feedNeeded -= withdrawn;
+          }
+        }
+      }
+
+      pasture.update(dtSeconds);
+
+      // Hayvan gübresi kompost tesisine aktarılır
+      if (pasture.totalAnimals > 0) {
+        final manureProduced = pasture.totalAnimals * (dtSeconds / 60.0) * 0.4;
+        compostFacility.addManure(manureProduced);
+      }
+
+      final milkStore = min(
+        pasture.milkStock,
+        fleetManager.remainingWarehouseCapacity,
+      );
+      if (milkStore > 0) {
+        pasture.milkStock -= milkStore;
+        fleetManager.depositToWarehouse('fresh_milk', milkStore);
+      }
+
+      final woolStore = min(
+        pasture.woolStock,
+        fleetManager.remainingWarehouseCapacity,
+      );
+      if (woolStore > 0) {
+        pasture.woolStock -= woolStore;
+        fleetManager.depositToWarehouse('wool_bale', woolStore);
+      }
+
+      if (prevMilk != pasture.milkStock || prevWool != pasture.woolStock) {
+        changed = true;
+      }
+    }
+
+    // 3. Organik Kompost Fermantasyonu
+    final prevCompost = compostFacility.readyCompostBags;
+    compostFacility.update(dtSeconds);
+    if (prevCompost != compostFacility.readyCompostBags) {
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 4: Makine Yakıt ve Bakım Sistemi
+  // ---------------------------------------------------------------------------
+  EquipmentMaintenanceState getEquipmentMaintenance(String equipmentId) {
+    return equipmentMaintenance.putIfAbsent(
+      equipmentId,
+      () => EquipmentMaintenanceState(equipmentId: equipmentId),
     );
-    if (storeCount > 0) {
-      final eggs = coop.takeEggs(storeCount);
-      fleetManager.depositToWarehouse('fresh_eggs', eggs);
+  }
+
+  bool refuelEquipment(String equipmentId, {int liters = 50}) {
+    final maint = getEquipmentMaintenance(equipmentId);
+    if (maint.fuelPercent >= 99.0) return false;
+    final cost = (liters * 2).clamp(10, 500); // 2 ÇK / litre
+    if (_state.farmCredits < cost) return false;
+    _state = _state.copyWith(farmCredits: _state.farmCredits - cost);
+    ledger.recordExpense(amount: cost, label: 'Makine yakıtı');
+    maint.refuel(targetPercent: min(100.0, maint.fuelPercent + (liters * 2.0)));
+    questAndBadgeManager.trackMaintenance();
+    return true;
+  }
+
+  bool serviceEquipment(String equipmentId) {
+    final maint = getEquipmentMaintenance(equipmentId);
+    const serviceCost = 150;
+    if (_state.farmCredits < serviceCost) return false;
+    _state = _state.copyWith(farmCredits: _state.farmCredits - serviceCost);
+    ledger.recordExpense(amount: serviceCost, label: 'Makine servisi');
+    maint.serviceOverhaul();
+    questAndBadgeManager.trackMaintenance();
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 5: Gelişmiş Hayvancılık (İnek, Koyun, Otlama)
+  // ---------------------------------------------------------------------------
+  bool setPastureGrazing(bool enabled) {
+    pasture.isPastureGrazingEnabled = enabled;
+    return true;
+  }
+
+  bool buyCows(int count) {
+    final bought = pasture.buyCows(
+      count,
+      450,
+      paymentProcessor: (cost) {
+        if (_state.farmCredits < cost) return false;
+        _state = _state.copyWith(farmCredits: _state.farmCredits - cost);
+        ledger.recordExpense(
+          amount: cost,
+          label: 'Hayvan alımı',
+          quantity: count,
+        );
+        return true;
+      },
+    );
+    if (bought) {
+      questAndBadgeManager.trackLivestock(pasture.totalAnimals);
     }
-    return previousFeed != coop.feedStock || previousEggs != coop.eggStock;
+    return bought;
+  }
+
+  bool buySheep(int count) {
+    final bought = pasture.buySheep(
+      count,
+      300,
+      paymentProcessor: (cost) {
+        if (_state.farmCredits < cost) return false;
+        _state = _state.copyWith(farmCredits: _state.farmCredits - cost);
+        ledger.recordExpense(
+          amount: cost,
+          label: 'Hayvan alımı',
+          quantity: count,
+        );
+        return true;
+      },
+    );
+    if (bought) {
+      questAndBadgeManager.trackLivestock(pasture.totalAnimals);
+    }
+    return bought;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 6: Gübreleme ve Kompost Üretimi
+  // ---------------------------------------------------------------------------
+  bool addGrassToCompost(int baleCount) {
+    if (baleCount <= 0 || _state.groundBaleCount < baleCount) return false;
+    final success = compostFacility.addGrassBales(baleCount);
+    if (success) {
+      _state = _state.copyWith(
+        groundBaleCount: _state.groundBaleCount - baleCount,
+      );
+    }
+    return success;
+  }
+
+  bool applyOrganicCompost(int plotId) {
+    final plot = plotById(plotId);
+    if (plot == null || !plot.isOwned || plot.hasOrganicCompostBonus) {
+      return false;
+    }
+    if (compostFacility.readyCompostBags <= 0) return false;
+    compostFacility.takeCompost(1);
+    questAndBadgeManager.trackCompostApplied();
+    final updatedPlots = plots.map((p) {
+      if (p.id == plotId) {
+        return p.copyWith(
+          hasOrganicCompostBonus: true,
+          soilConditionPoints: min(100, p.soilConditionPoints + 15),
+        );
+      }
+      return p;
+    }).toList();
+    _state = _state.copyWith(plots: updatedPlots);
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 8: Çiftlik Prestiji ve Unvanlar
+  // ---------------------------------------------------------------------------
+  FarmTitle get farmTitle => prestigeManager.currentTitle;
+
+  // ---------------------------------------------------------------------------
+  // Madde 9: İşçi Ekibi Uzmanlaşması (Perk Ağacı)
+  // ---------------------------------------------------------------------------
+  bool investWorkerSkill(WorkerSkillType type) {
+    return workerSpecialization.investSkill(type);
+  }
+
+  void respecWorkerSkills() {
+    workerSpecialization.respec();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 10: Günlük Görevler ve Başarı Rozetleri
+  // ---------------------------------------------------------------------------
+  bool claimDailyQuest(String questId) {
+    final reward = questAndBadgeManager.claimQuestReward(questId);
+    if (reward != null && reward > 0) {
+      _state = _state.copyWith(farmCredits: _state.farmCredits + reward);
+      ledger.recordIncome(amount: reward, label: 'Günlük görev ödülü');
+      prestigeManager.addEvidence(reward);
+      return true;
+    }
+    return false;
+  }
+
+  bool claimAchievementBadge(String badgeId) {
+    final reward = questAndBadgeManager.claimBadgeReward(badgeId);
+    if (reward != null && reward > 0) {
+      _state = _state.copyWith(farmCredits: _state.farmCredits + reward);
+      ledger.recordIncome(amount: reward, label: 'Başarı ödülü');
+      prestigeManager.addEvidence(reward);
+      return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Madde 12: Banka Kredileri ve Devlet Hibeleri
+  // ---------------------------------------------------------------------------
+  bool takeBankLoan(BankLoanType type, {DateTime? now}) {
+    final loan = financeManager.takeLoan(type, (now ?? DateTime.now()).toUtc());
+    if (loan != null) {
+      _state = _state.copyWith(
+        farmCredits: _state.farmCredits + type.principalAmount,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  bool payLoanInstallment(String loanId) {
+    final loan = financeManager.activeLoans.firstWhere(
+      (l) => l.id == loanId,
+      orElse: () => throw ArgumentError('Loan not found'),
+    );
+    return loan.payInstallment(
+      paymentProcessor: (amount) {
+        if (_state.farmCredits < amount) return false;
+        _state = _state.copyWith(farmCredits: _state.farmCredits - amount);
+        ledger.recordExpense(amount: amount, label: 'Kredi taksiti');
+        return true;
+      },
+    );
+  }
+
+  bool claimGovernmentGrant(String grantId) {
+    final amount = financeManager.claimGrant(grantId);
+    if (amount != null && amount > 0) {
+      _state = _state.copyWith(farmCredits: _state.farmCredits + amount);
+      ledger.recordIncome(amount: amount, label: 'Devlet hibesi');
+      prestigeManager.addEvidence(amount);
+      return true;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------------

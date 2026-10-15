@@ -434,6 +434,7 @@ class OpeningMowingWorld extends World {
     for (final bale in List<GroundBaleComponent>.from(groundBales)) {
       if ((player.position - bale.position).length <= 36) {
         if (session.pickUpBale()) {
+          AudioController.instance.playEffect(SoundEffect.balePickup);
           groundBales.remove(bale);
           bale.removeFromParent();
           player.updateMowing(false, 0);

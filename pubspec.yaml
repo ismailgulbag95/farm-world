@@ -25,6 +25,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/opening/
+    - assets/images/story/
     - assets/images/ui/
     - assets/images/management/
     - assets/images/equipment/
