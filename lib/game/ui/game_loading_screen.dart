@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import 'farm_field_texture_atlas.dart';
+import 'farm_map_landmark_atlas.dart';
+
 /// Başlangıç Yükleme Ekranı ve Görsel Vadi Açılış Animasyonu
 class GameLoadingScreen extends StatefulWidget {
   const GameLoadingScreen({
@@ -22,6 +25,7 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
   double _loadingProgress = 0.0;
   int _tipIndex = 0;
   bool _isIntroPlaying = false;
+  bool _hasSkipped = false;
   Timer? _progressTimer;
 
   static const List<String> _loadingTips = [
@@ -38,6 +42,10 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
   void initState() {
     super.initState();
 
+    // Dokuları arka planda hemen önbelleğe al
+    unawaited(FarmMapLandmarkAtlas.preload());
+    unawaited(FarmFieldTextureAtlas.preload());
+
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -45,21 +53,21 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
 
     _introTransitionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 350),
     );
 
     _startSimulatedLoading();
   }
 
   void _startSimulatedLoading() {
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 20), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
 
       setState(() {
-        _loadingProgress += 0.022;
+        _loadingProgress += 0.045;
         final tipStep = (_loadingProgress * _loadingTips.length).floor();
         _tipIndex = tipStep.clamp(0, _loadingTips.length - 1);
 
@@ -73,14 +81,21 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
   }
 
   void _triggerIntroAnimation() {
+    if (!mounted || _isIntroPlaying) return;
     setState(() => _isIntroPlaying = true);
     _introTransitionController.forward().then((_) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) {
-          widget.onLoadingComplete();
-        }
-      });
+      if (mounted) {
+        widget.onLoadingComplete();
+      }
     });
+  }
+
+  void _skipIntro() {
+    if (_hasSkipped) return;
+    _hasSkipped = true;
+    _progressTimer?.cancel();
+    _loadingProgress = 1.0;
+    widget.onLoadingComplete();
   }
 
   @override
@@ -104,9 +119,12 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
 
         return Scaffold(
           backgroundColor: const Color(0xFF1B2319),
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
+          body: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _skipIntro,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
               // Arka Plan Vadi Görseli (Pastoral Asset)
               Transform.scale(
                 scale: bgScale,
@@ -291,6 +309,16 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
                                     ),
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Hemen başlamak için ekrana dokun ➔',
+                                  style: TextStyle(
+                                    color: Color(0xBBFDE68A),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -374,6 +402,7 @@ class _GameLoadingScreenState extends State<GameLoadingScreen>
                   ),
                 ),
             ],
+            ),
           ),
         );
       },

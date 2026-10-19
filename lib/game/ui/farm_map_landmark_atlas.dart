@@ -7,27 +7,47 @@ class FarmMapLandmarkAtlas {
   static const String assetPath =
       'assets/images/map/farm-world-map-landmarks-v1.png';
 
+  static ui.Image? _sharedImage;
+  static Future<bool>? _pendingLoad;
   ui.Image? _image;
   bool _disposed = false;
 
-  bool get isReady => _image != null;
+  bool get isReady => (_image ?? _sharedImage) != null;
+
+  static Future<bool> preload() async {
+    if (_sharedImage != null) return true;
+    if (_pendingLoad != null) return _pendingLoad!;
+    _pendingLoad = () async {
+      try {
+        final data = await rootBundle.load(assetPath);
+        final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+        try {
+          final frame = await codec.getNextFrame();
+          _sharedImage = frame.image;
+          return true;
+        } finally {
+          codec.dispose();
+        }
+      } catch (_) {
+        return false;
+      } finally {
+        _pendingLoad = null;
+      }
+    }();
+    return _pendingLoad!;
+  }
 
   Future<bool> load() async {
+    if (_sharedImage != null) {
+      _image = _sharedImage;
+      return true;
+    }
     final current = _image;
     if (current != null) return true;
-    final data = await rootBundle.load(assetPath);
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-    try {
-      final frame = await codec.getNextFrame();
-      if (_disposed) {
-        frame.image.dispose();
-        return false;
-      }
-      _image = frame.image;
-      return true;
-    } finally {
-      codec.dispose();
-    }
+    final success = await preload();
+    if (_disposed) return false;
+    _image = _sharedImage;
+    return success;
   }
 
   /// Draws an atlas entry at a stable screen-space size around a world point.

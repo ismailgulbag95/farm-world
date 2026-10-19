@@ -1067,26 +1067,30 @@ class ProceduralFarmWorld {
     return _settlementsCache!;
   }
 
-  List<WorldMapBridge> get bridges {
-    final cached = _bridgesCache;
-    if (cached != null) return cached;
-    final result = <WorldMapBridge>[];
+  List<WorldMapBridge> bridgesInBounds(Rect bounds) {
+    final candidateWatercourses = watercourses.where((w) {
+      if (w.type == WorldMapWatercourseType.irrigationCanal) return false;
+      final wBounds = _boundsOfPoints(w.points).inflate(w.width / 2 + 30);
+      return wBounds.overlaps(bounds);
+    }).toList();
+    if (candidateWatercourses.isEmpty) return const [];
+
     final roads = roadSegmentsInBounds(
-      worldMinX,
-      worldMinY,
-      worldMaxX,
-      worldMaxY,
+      bounds.left - 40,
+      bounds.top - 40,
+      bounds.right + 40,
+      bounds.bottom + 40,
     );
+    if (roads.isEmpty) return const [];
+
+    final result = <WorldMapBridge>[];
     for (final road in roads) {
       if (road.type == WorldMapRoadType.trail) continue;
       final roadBounds = _boundsOfPoints(road.points);
-      for (final watercourse in watercourses) {
-        if (watercourse.type == WorldMapWatercourseType.irrigationCanal) {
-          continue;
-        }
+      for (final watercourse in candidateWatercourses) {
+        final watercourseBounds = _boundsOfPoints(watercourse.points);
         if (!roadBounds.overlaps(
-          _boundsOfPoints(watercourse.points)
-              .inflate(road.width / 2 + watercourse.width / 2 + 12),
+          watercourseBounds.inflate(road.width / 2 + watercourse.width / 2 + 12),
         )) {
           continue;
         }
@@ -1111,6 +1115,7 @@ class ProceduralFarmWorld {
               waterEnd,
             );
             if (intersection == null ||
+                !bounds.inflate(30).contains(Offset(intersection.x, intersection.y)) ||
                 result.any(
                   (bridge) =>
                       bridge.roadId == road.id &&
@@ -1131,6 +1136,23 @@ class ProceduralFarmWorld {
               ),
             );
           }
+        }
+      }
+    }
+    return result;
+  }
+
+  List<WorldMapBridge> get bridges {
+    final cached = _bridgesCache;
+    if (cached != null) return cached;
+    final result = <WorldMapBridge>[];
+    for (final watercourse in watercourses) {
+      if (watercourse.type == WorldMapWatercourseType.irrigationCanal) continue;
+      final wBounds = _boundsOfPoints(watercourse.points).inflate(watercourse.width + 50);
+      final found = bridgesInBounds(wBounds);
+      for (final b in found) {
+        if (!result.any((existing) => existing.position.distanceTo(b.position) < 50)) {
+          result.add(b);
         }
       }
     }
@@ -2671,7 +2693,26 @@ class ProceduralFarmWorld {
           roadPosition == null) {
         continue;
       }
-      final position = roadPosition ?? generatedPosition;
+      WorldMapPoint position;
+      if (roadPosition != null) {
+        final footprint = _pointOfInterestFootprint(type);
+        final road = _nearestRoadAt(roadPosition, searchRadius: 18);
+        final roadWidth = road?.width ?? 20.0;
+        final offsetDist = roadWidth / 2 + footprint * 0.55 + 16.0;
+        final dx = generatedPosition.x - roadPosition.x;
+        final dy = generatedPosition.y - roadPosition.y;
+        final len = sqrt(dx * dx + dy * dy);
+        if (len > 0.001) {
+          position = WorldMapPoint(
+            roadPosition.x + (dx / len) * offsetDist,
+            roadPosition.y + (dy / len) * offsetDist,
+          );
+        } else {
+          position = WorldMapPoint(roadPosition.x + offsetDist, roadPosition.y);
+        }
+      } else {
+        position = generatedPosition;
+      }
       if (generationVersion >= collisionSafeGenerationVersion &&
           _pointOfInterestConflicts(position, type)) {
         continue;
@@ -2773,6 +2814,25 @@ class ProceduralFarmWorld {
             mountain.height / 2 + footprint + 20,
           ),
         )) {
+          return true;
+        }
+      }
+    }
+    final nearbyRoads = roadSegmentsInBounds(
+      position.x - footprint - 30,
+      position.y - footprint - 30,
+      position.x + footprint + 30,
+      position.y + footprint + 30,
+    );
+    for (final road in nearbyRoads) {
+      final reqDist = road.width / 2 + footprint * 0.5 + 6.0;
+      for (var i = 0; i < road.points.length - 1; i++) {
+        if (WorldMapParcel._distanceToSegment(
+              position,
+              road.points[i],
+              road.points[i + 1],
+            ) <=
+            reqDist) {
           return true;
         }
       }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,9 +16,8 @@ import '../domain/procedural_farm_world.dart';
 import '../domain/tech_tree.dart';
 import 'farm_management_sheet.dart';
 import 'farm_operations_sheet.dart';
-import 'farm_map_landmark_atlas.dart';
-import 'farm_field_texture_atlas.dart';
 import 'farm_map_region_info_card.dart';
+import 'isometric_world_map_view.dart';
 import 'market_trade_sheet.dart';
 import 'tech_tree_overlay.dart';
 import 'story_comic_screen.dart';
@@ -71,6 +69,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   Offset _cameraCenter = const Offset(-150, -120);
   double _zoom = 0.64;
+  final ValueNotifier<MapCameraPose> _cameraPoseListenable = ValueNotifier(
+    const MapCameraPose(center: WorldMapPoint(-150, -120), zoom: 0.64),
+  );
   Size _viewportSize = Size.zero;
   String? _selectedParcelId;
   String? _selectedRegionId;
@@ -90,11 +91,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   bool _showFertility = false;
   int _mapRevision = 0;
   late final Timer _farmTicker;
-  late final AnimationController _fieldMachineController;
   final Map<int, String> _selectedCropByPlot = {};
-  final FarmMapLandmarkAtlas _landmarkAtlas = FarmMapLandmarkAtlas();
-  final FarmFieldTextureAtlas _fieldTextureAtlas = FarmFieldTextureAtlas();
-  int _farmTickCount = 0;
 
   static const double _minZoom = 0.10;
   static const double _maxZoom = 1.85;
@@ -102,13 +99,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   @override
   void initState() {
     super.initState();
-    unawaited(_loadLandmarkAtlas());
-    unawaited(_loadFieldTextureAtlas());
     _selectedFarmPlotId = widget.session.starterPlotId;
-    _fieldMachineController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12),
-    )..repeat();
     final resumedJobs = widget.session.advanceFarmOperations(DateTime.now());
     final resumedTutorial = widget.session.advanceFarmTutorial(DateTime.now());
     final resumedBuildingBills = widget.session.advanceBuildingOperatingCosts(
@@ -130,23 +121,17 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       final buildingBillsChanged = widget.session.advanceBuildingOperatingCosts(
         DateTime.now(),
       );
-      _farmTickCount++;
       if (!mounted) return;
-      if (earned > 0 ||
+      final sessionChanged =
+          earned > 0 ||
           processingChanged ||
           livestockChanged ||
           completedJob ||
           tutorialChanged ||
-          buildingBillsChanged) {
+          buildingBillsChanged;
+      if (sessionChanged) {
         widget.onSessionChanged();
-      }
-      if (_farmTickCount % 2 == 0 ||
-          processingChanged ||
-          livestockChanged ||
-          completedJob ||
-          tutorialChanged ||
-          buildingBillsChanged) {
-        setState(() => _mapRevision++);
+        setState(() {});
       }
     });
     final report = widget.offlineProgressReport;
@@ -182,30 +167,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
   }
 
-  Future<void> _loadLandmarkAtlas() async {
-    try {
-      final loaded = await _landmarkAtlas.load();
-      if (loaded && mounted) setState(() => _mapRevision++);
-    } on Object {
-      // The vector markers remain available if the optional atlas cannot load.
-    }
-  }
-
-  Future<void> _loadFieldTextureAtlas() async {
-    try {
-      final loaded = await _fieldTextureAtlas.load();
-      if (loaded && mounted) setState(() => _mapRevision++);
-    } on Object {
-      // The vector soil, crop colors, and furrows remain as a fallback.
-    }
-  }
-
   @override
   void dispose() {
     _farmTicker.cancel();
-    _fieldMachineController.dispose();
-    _landmarkAtlas.dispose();
-    _fieldTextureAtlas.dispose();
+    _cameraPoseListenable.dispose();
     super.dispose();
   }
 
@@ -225,8 +190,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               setState(() {
                 if (starter != null) {
                   _selectedFarmPlotId = starter.id;
-                  _cameraCenter = Offset(starter.mapX, starter.mapY);
-                  _zoom = 0.9;
+                  _setCameraPose(Offset(starter.mapX, starter.mapY), 0.9);
                 }
               });
             }
@@ -616,8 +580,14 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     HapticFeedback.selectionClick();
   }
 
-  void _handleMapTap(Offset localPosition) {
-    final worldPosition = _screenToWorld(localPosition);
+  void _handleMapTap(
+    Offset localPosition, {
+    WorldMapPoint? worldPoint,
+    bool hitTopDownVehicleMarkers = true,
+  }) {
+    final worldPosition = worldPoint == null
+        ? _screenToWorld(localPosition)
+        : Offset(worldPoint.x, worldPoint.y);
     if (_measureMode) {
       setState(() {
         if (_measureStart == null || _measureEnd != null) {
@@ -699,12 +669,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       return;
     }
 
-    final tappedVehicle = _fleetVehicleAtScreenPoint(localPosition);
-    if (tappedVehicle != null) {
-      _selectFleetVehicle(tappedVehicle);
-      return;
-    }
-
     if (mapPoint.distanceTo(
           WorldMapPoint(starterMarketMapX, starterMarketMapY),
         ) <=
@@ -774,6 +738,21 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     HapticFeedback.selectionClick();
   }
 
+  void _setCameraPose(Offset center, double zoom) {
+    final pose = clampIsometricCameraPose(
+      MapCameraPose(
+        center: WorldMapPoint(center.dx, center.dy),
+        zoom: zoom,
+      ),
+      _viewportSize,
+    );
+    _cameraCenter = Offset(pose.center.x, pose.center.y);
+    _zoom = pose.zoom;
+    if (_cameraPoseListenable.value != pose) {
+      _cameraPoseListenable.value = pose;
+    }
+  }
+
   void _selectFleetVehicle(FleetVehicleState vehicle, {bool focus = false}) {
     final point = _fleetVehicleWorldPoint(vehicle);
     setState(() {
@@ -782,8 +761,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       _selectedParcelId = null;
       _selectedRegionId = null;
       if (focus) {
-        _cameraCenter = point;
-        _zoom = _zoom.clamp(0.68, _maxZoom).toDouble();
+        _setCameraPose(point, _zoom.clamp(0.68, _maxZoom).toDouble());
       }
     });
     HapticFeedback.selectionClick();
@@ -809,11 +787,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
     return null;
   }
-
-  Offset _worldToScreen(Offset point) => Offset(
-    (point.dx - _cameraCenter.dx) * _zoom + _viewportSize.width / 2,
-    (point.dy - _cameraCenter.dy) * _zoom + _viewportSize.height / 2,
-  );
 
   TransportRoute? _routeForFleetVehicle(FleetVehicleState vehicle) {
     final id = vehicle.assignedRouteId;
@@ -842,92 +815,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       Offset(end.positionX, end.positionY),
       vehicle.progressToNextStop.clamp(0.0, 1.0).toDouble(),
     )!;
-  }
-
-  double _fleetVehicleHeading(FleetVehicleState vehicle) {
-    final route = _routeForFleetVehicle(vehicle);
-    if (route == null || route.stops.length < 2) return math.pi / 2;
-    final index = vehicle.currentStopIndex
-        .clamp(0, route.stops.length - 1)
-        .toInt();
-    final start = route.stops[index];
-    final end = route.stops[route.nextStopIndex(index)];
-    return math.atan2(
-          end.positionY - start.positionY,
-          end.positionX - start.positionX,
-        ) +
-        math.pi / 2;
-  }
-
-  double get _fleetMarkerWidth => (_zoom * 56).clamp(26.0, 50.0).toDouble();
-  double get _fleetMarkerLength => (_zoom * 88).clamp(36.0, 78.0).toDouble();
-  double get _fieldMachineScale => _zoom.clamp(0.42, 1.12).toDouble();
-
-  Map<String, Offset> _fleetMarkerDisplayOffsets() {
-    final vehicles = [...widget.session.fleetManager.vehicles]
-      ..sort((a, b) => a.id.compareTo(b.id));
-    final positions = {
-      for (final vehicle in vehicles)
-        vehicle.id: _fleetVehicleWorldPoint(vehicle),
-    };
-    final offsets = {for (final vehicle in vehicles) vehicle.id: Offset.zero};
-    final groupedIds = <String>{};
-    final radius = (_fleetMarkerWidth * 0.42).clamp(10.0, 21.0).toDouble();
-
-    for (final vehicle in vehicles) {
-      if (!groupedIds.add(vehicle.id)) continue;
-      final worldPoint = positions[vehicle.id]!;
-      final overlapGroup = vehicles
-          .where(
-            (candidate) =>
-                (positions[candidate.id]! - worldPoint).distance <= 1,
-          )
-          .toList(growable: false);
-      groupedIds.addAll(overlapGroup.map((candidate) => candidate.id));
-      if (overlapGroup.length < 2) continue;
-
-      final heading = _fleetVehicleHeading(overlapGroup.first);
-      for (var index = 0; index < overlapGroup.length; index++) {
-        final angle = heading + (math.pi * 2 * index / overlapGroup.length);
-        offsets[overlapGroup[index].id] = Offset(
-          math.cos(angle) * radius,
-          math.sin(angle) * radius,
-        );
-      }
-    }
-    return offsets;
-  }
-
-  Offset _fleetMarkerScreenPoint(
-    FleetVehicleState vehicle,
-    Map<String, Offset> displayOffsets,
-  ) =>
-      _worldToScreen(_fleetVehicleWorldPoint(vehicle)) +
-      (displayOffsets[vehicle.id] ?? Offset.zero);
-
-  FleetVehicleState? _fleetVehicleAtScreenPoint(Offset point) {
-    final vehicles = widget.session.fleetManager.vehicles;
-    final displayOffsets = _fleetMarkerDisplayOffsets();
-    FleetVehicleState? closest;
-    var closestDistanceSquared = double.infinity;
-    for (final vehicle in vehicles) {
-      final screenPoint = _fleetMarkerScreenPoint(vehicle, displayOffsets);
-      final angle = _fleetVehicleHeading(vehicle);
-      final delta = point - screenPoint;
-      final cosine = math.cos(-angle);
-      final sine = math.sin(-angle);
-      final localX = delta.dx * cosine - delta.dy * sine;
-      final localY = delta.dx * sine + delta.dy * cosine;
-      if (localX.abs() <= _fleetMarkerWidth / 2 + 12 &&
-          localY.abs() <= _fleetMarkerLength / 2 + 12) {
-        final distanceSquared = localX * localX + localY * localY;
-        if (distanceSquared < closestDistanceSquared) {
-          closest = vehicle;
-          closestDistanceSquared = distanceSquared;
-        }
-      }
-    }
-    return closest;
   }
 
   bool _owns(WorldMapParcel parcel) => parcel.isHome
@@ -982,59 +869,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   WorldMapParcel? get _selectedParcel {
     final id = _selectedParcelId;
     return id == null ? null : _world.parcelById(id, searchRadius: 2);
-  }
-
-  void _onScaleStart(ScaleStartDetails details) {
-    _gestureStartFocal = details.localFocalPoint;
-    _gestureCurrentFocal = details.localFocalPoint;
-    _gestureStartCamera = _cameraCenter;
-    _gestureStartZoom = _zoom;
-    _gestureStartAnchor = _screenToWorld(details.localFocalPoint);
-    _gestureMoved = false;
-  }
-
-  Offset _gestureStartFocal = Offset.zero;
-  Offset _gestureCurrentFocal = Offset.zero;
-  Offset _gestureStartCamera = Offset.zero;
-  Offset _gestureStartAnchor = Offset.zero;
-  double _gestureStartZoom = 1;
-  bool _gestureMoved = false;
-
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    _gestureCurrentFocal = details.localFocalPoint;
-    final scale = details.scale;
-    final nextZoom = (_gestureStartZoom * scale)
-        .clamp(_minZoom, _maxZoom)
-        .toDouble();
-    final wasDragged =
-        (details.localFocalPoint - _gestureStartFocal).distance > 5;
-    final wasPinched = (nextZoom - _gestureStartZoom).abs() > 0.004;
-    _gestureMoved = _gestureMoved || wasDragged || wasPinched;
-
-    setState(() {
-      _zoom = nextZoom;
-      if (wasPinched || scale != 1) {
-        final viewportCenter = Offset(
-          _viewportSize.width / 2,
-          _viewportSize.height / 2,
-        );
-        _cameraCenter = _clampCameraCenter(
-          _gestureStartAnchor -
-              (details.localFocalPoint - viewportCenter) / _zoom,
-          _zoom,
-        );
-      } else {
-        _cameraCenter = _clampCameraCenter(
-          _gestureStartCamera -
-              (details.localFocalPoint - _gestureStartFocal) / _zoom,
-          _zoom,
-        );
-      }
-    });
-  }
-
-  void _onScaleEnd(ScaleEndDetails details) {
-    if (!_gestureMoved) _handleMapTap(_gestureCurrentFocal);
   }
 
   Future<void> _confirmLogisticsLink(
@@ -1220,8 +1054,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       _selectedFarmPlotId = plot.id;
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
-      _cameraCenter = Offset(plot.mapX, plot.mapY);
-      _zoom = _zoom.clamp(0.68, _maxZoom).toDouble();
+      _setCameraPose(
+        Offset(plot.mapX, plot.mapY),
+        _zoom.clamp(0.68, _maxZoom).toDouble(),
+      );
     });
   }
 
@@ -1351,8 +1187,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   void _focusSalesPoint() {
     setState(() {
-      _cameraCenter = const Offset(starterMarketMapX, starterMarketMapY);
-      _zoom = math.max(_zoom, 0.72);
+      _setCameraPose(
+        const Offset(starterMarketMapX, starterMarketMapY),
+        math.max(_zoom, 0.72),
+      );
       _selectedFarmPlotId = null;
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
@@ -1433,8 +1271,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     if (coordinate == null || !mounted) return;
     setState(() {
       final targetZoom = _zoom < 0.42 ? 0.42 : _zoom;
-      _cameraCenter = _clampCameraCenter(coordinate, targetZoom);
-      _zoom = targetZoom;
+      _setCameraPose(_clampCameraCenter(coordinate, targetZoom), targetZoom);
       _selectedParcelId = null;
     });
   }
@@ -1539,262 +1376,305 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     if (mounted) setState(() {});
   }
 
-  List<Widget> _fleetMapMarkers() {
-    final fleet = widget.session.fleetManager;
-    final markers = <Widget>[];
-    final displayOffsets = _fleetMarkerDisplayOffsets();
-    for (final vehicle in fleet.vehicles) {
-      final screenPoint = _fleetMarkerScreenPoint(vehicle, displayOffsets);
-      if (screenPoint.dx < -100 ||
-          screenPoint.dy < -100 ||
-          screenPoint.dx > _viewportSize.width + 100 ||
-          screenPoint.dy > _viewportSize.height + 100) {
-        continue;
+  Map<String, IsometricFieldState> _isometricFieldStates(DateTime now) {
+    final states = <String, IsometricFieldState>{};
+    for (final plot in widget.session.plots) {
+      final parcelId = plot.mapParcelId;
+      if (parcelId == null || !plot.isOwned) continue;
+
+      final activeJob = plot.activeJob;
+      final state = switch (activeJob?.operation) {
+        FarmOperation.prepare => IsometricFieldState.plowed,
+        FarmOperation.fertilize => IsometricFieldState.fertilized,
+        FarmOperation.sow => IsometricFieldState.growing,
+        FarmOperation.harvest => IsometricFieldState.harvestReady,
+        FarmOperation.bale => IsometricFieldState.harvested,
+        null => _isometricFieldStateForPlot(plot, now),
+      };
+      states[parcelId] = state;
+    }
+    return states;
+  }
+
+  Map<String, String> _isometricFieldCropIds() {
+    final cropIds = <String, String>{};
+    for (final plot in widget.session.plots) {
+      final parcelId = plot.mapParcelId;
+      final cropId = plot.activeCropId;
+      if (plot.isOwned && parcelId != null && cropId != null) {
+        cropIds[parcelId] = cropId;
       }
+    }
+    return cropIds;
+  }
 
-      final length = _fleetMarkerLength;
-      final width = _fleetMarkerWidth;
-      final angle = _fleetVehicleHeading(vehicle);
-      final trailer = vehicle.trailerType;
-      final selected = vehicle.id == _selectedFleetVehicleId;
+  IsometricFieldState _isometricFieldStateForPlot(
+    CropPlotState plot,
+    DateTime now,
+  ) {
+    if (plot.hasHarvestedActiveCrop) return IsometricFieldState.harvested;
+    if (plot.hasActiveCrop) {
+      final snapshot = widget.session.cropSnapshotForPlot(plot.id, now);
+      return snapshot?.isHarvestable == true
+          ? IsometricFieldState.harvestReady
+          : IsometricFieldState.growing;
+    }
+    if (plot.use == CropPlotUse.pasture && plot.readyGrassBales > 0) {
+      return IsometricFieldState.harvestReady;
+    }
+    if (plot.hasOrganicCompostBonus || plot.soilConditionPoints > 80) {
+      return IsometricFieldState.fertilized;
+    }
+    return plot.isCultivated
+        ? IsometricFieldState.plowed
+        : IsometricFieldState.harvested;
+  }
+
+  List<IsometricMapMarker> _isometricMapMarkers({
+    required Offset playerPoint,
+    required bool hasMarketOrder,
+  }) {
+    final markers = <IsometricMapMarker>[
+      IsometricMapMarker(
+        id: 'player',
+        position: WorldMapPoint(playerPoint.dx, playerPoint.dy),
+        kind: IsometricMarkerKind.player,
+        label: 'Sen',
+        size: 34,
+      ),
+      IsometricMapMarker(
+        id: 'market',
+        position: const WorldMapPoint(starterMarketMapX, starterMarketMapY),
+        kind: hasMarketOrder
+            ? IsometricMarkerKind.order
+            : IsometricMarkerKind.market,
+        label: hasMarketOrder ? 'Sipariş · Kasaba pazarı' : 'Kasaba pazarı',
+        size: 38,
+      ),
+    ];
+
+    const home = Offset(-150, -120);
+    if ((playerPoint - home).distance > 48) {
       markers.add(
-        Positioned(
-          left: screenPoint.dx - width / 2,
-          top: screenPoint.dy - length / 2,
-          width: width,
-          height: length,
-          child: Transform.rotate(
-            angle: angle,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: selected ? const Color(0x55FFC84F) : Colors.transparent,
-                borderRadius: BorderRadius.circular(width / 2),
-                border: selected
-                    ? Border.all(color: const Color(0xFFE3A923), width: 2)
-                    : null,
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  if (trailer != null)
-                    Positioned(
-                      left: width * 0.06,
-                      top: length * 0.43,
-                      width: width * 0.88,
-                      height: length * 0.56,
-                      child: Image.asset(
-                        trailer.imageAsset,
-                        fit: BoxFit.contain,
-                        cacheWidth: 160,
-                        filterQuality: FilterQuality.medium,
-                      ),
-                    ),
-                  Positioned(
-                    left: width * 0.04,
-                    top: 0,
-                    width: width * 0.92,
-                    height: trailer == null ? length : length * 0.58,
-                    child: Image.asset(
-                      vehicle.truckType.imageAsset,
-                      fit: BoxFit.contain,
-                      cacheWidth: 160,
-                      filterQuality: FilterQuality.medium,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        const IsometricMapMarker(
+          id: 'farm:home',
+          position: WorldMapPoint(-150, -120),
+          kind: IsometricMarkerKind.farm,
+          label: 'Çiftlik',
+          size: 38,
         ),
       );
+    }
 
-      // Tır Canlı Kargo ve Durum Rozeti
-      final fuelRatio = (vehicle.fuelLevel / 100.0).clamp(0.0, 1.0);
-      final wearRatio = (vehicle.wearPercent / 100.0).clamp(0.0, 1.0);
-      final fuelColor = fuelRatio > 0.4
-          ? const Color(0xFF4CAF50)
-          : fuelRatio > 0.15
-          ? const Color(0xFFFF9800)
-          : const Color(0xFFF44336);
-      final hasCargo = vehicle.cargoAmount > 0;
-
+    for (final settlement in _world.settlements) {
+      final size = switch (settlement.kind) {
+        WorldMapSettlementKind.city => 66.0,
+        WorldMapSettlementKind.town => 48.0,
+        WorldMapSettlementKind.village => 32.0,
+        WorldMapSettlementKind.hamlet => 24.0,
+      };
       markers.add(
-        Positioned(
-          left: screenPoint.dx - 55,
-          top: screenPoint.dy - length / 2 - 18,
-          width: 110,
-          height: 18,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-              decoration: BoxDecoration(
-                color: const Color(0xDD1B3322),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: selected ? _mapGold : const Color(0x66FFFFFF),
-                  width: selected ? 1.5 : 0.8,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 3,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (vehicle.status == VehicleStatus.loading) ...[
-                    const Icon(
-                      Icons.hourglass_top_rounded,
-                      color: _mapGold,
-                      size: 9,
-                    ),
-                    const SizedBox(width: 2),
-                    const Text(
-                      'Yükleniyor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ] else if (vehicle.status == VehicleStatus.unloading) ...[
-                    const Icon(
-                      Icons.unarchive_rounded,
-                      color: _mapGold,
-                      size: 9,
-                    ),
-                    const SizedBox(width: 2),
-                    const Text(
-                      'Boşaltılıyor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ] else if (hasCargo) ...[
-                    const Text('📦', style: TextStyle(fontSize: 8)),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${vehicle.cargoAmount}t',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ] else ...[
-                    Text(
-                      vehicle.id.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 7.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+        IsometricMapMarker(
+          id: 'settlement:${settlement.id}',
+          position: settlement.position,
+          kind: IsometricMarkerKind.poi,
+          label: settlement.name,
+          size: size,
         ),
       );
+    }
 
-      // Yakıt ve Aşınma Durum Çubukları
+    for (final building in widget.session.buildings) {
+      final parcel = _world.parcelById(building.parcelId, searchRadius: 2);
+      final definition = FarmBuildingCatalog.byId(building.definitionId);
+      if (parcel == null || definition == null) continue;
       markers.add(
-        Positioned(
-          left: screenPoint.dx - 22,
-          top: screenPoint.dy + length / 2 + 3,
-          width: 44,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 3,
-                decoration: BoxDecoration(
-                  color: const Color(0x88000000),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: fuelRatio,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: fuelColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-              if (wearRatio > 0.05) ...[
-                const SizedBox(height: 1.5),
-                Container(
-                  height: 2,
-                  decoration: BoxDecoration(
-                    color: const Color(0x66000000),
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: wearRatio,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.orangeAccent,
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+        IsometricMapMarker(
+          id: 'building:${parcel.id}',
+          position: parcel.center,
+          kind: IsometricMarkerKind.farm,
+          label: definition.name,
+          size: 34,
+        ),
+      );
+    }
+
+    for (final plot in widget.session.plotsWithActiveJobs) {
+      markers.add(
+        IsometricMapMarker(
+          id: 'machine:${plot.id}',
+          position: WorldMapPoint(plot.mapX, plot.mapY),
+          kind: IsometricMarkerKind.vehicle,
+          label: 'Makine · ${plot.name}',
+          size: 28,
+        ),
+      );
+    }
+
+    for (final vehicle in widget.session.fleetManager.vehicles) {
+      final point = _fleetVehicleWorldPoint(vehicle);
+      markers.add(
+        IsometricMapMarker(
+          id: 'vehicle:${vehicle.id}',
+          position: WorldMapPoint(point.dx, point.dy),
+          kind: IsometricMarkerKind.vehicle,
+          label: vehicle.truckType.name,
+          size: vehicle.id == _selectedFleetVehicleId ? 42.0 : 32.0,
         ),
       );
     }
     return markers;
   }
 
-  List<Widget> _farmBuildingMapMarkers(DateTime now) {
-    final markers = <Widget>[];
-    for (final building in widget.session.buildings) {
-      final parcel = _world.parcelById(building.parcelId, searchRadius: 2);
-      final definition = FarmBuildingCatalog.byId(building.definitionId);
-      if (parcel == null || definition == null) continue;
-      final point = Offset(
-        (parcel.center.x - _cameraCenter.dx) * _zoom + _viewportSize.width / 2,
-        (parcel.center.y - _cameraCenter.dy) * _zoom + _viewportSize.height / 2,
+  void _handleIsometricMarkerTap(
+    String markerId,
+    WorldMapPoint worldPoint,
+    Offset localPosition,
+  ) {
+    if (_salesRouteMode ||
+        _routeMode ||
+        _measureMode ||
+        _constructionPlacementMode) {
+      _handleMapTap(
+        localPosition,
+        worldPoint: worldPoint,
+        hitTopDownVehicleMarkers: false,
       );
-      final extent = (math.min(parcel.width, parcel.height) * _zoom * 0.88)
-          .clamp(20.0, 260.0)
-          .toDouble();
-      if (point.dx < -extent ||
-          point.dy < -extent ||
-          point.dx > _viewportSize.width + extent ||
-          point.dy > _viewportSize.height + extent) {
+      return;
+    }
+    if (markerId == 'market') {
+      _openMarketTrade();
+      return;
+    }
+    if (markerId == 'player' || markerId == 'farm:home') {
+      final plotId = markerId == 'farm:home'
+          ? widget.session.starterPlotId
+          : _selectedFarmPlotId ?? widget.session.starterPlotId;
+      final plot = widget.session.plotById(plotId);
+      if (plot != null) _selectFarmPlot(plot);
+      return;
+    }
+    if (markerId.startsWith('vehicle:')) {
+      final vehicleId = markerId.substring('vehicle:'.length);
+      for (final vehicle in widget.session.fleetManager.vehicles) {
+        if (vehicle.id == vehicleId) {
+          _selectFleetVehicle(vehicle);
+          return;
+        }
+      }
+      return;
+    }
+    if (markerId.startsWith('machine:')) {
+      final plotId = int.tryParse(markerId.substring('machine:'.length));
+      final plot = plotId == null ? null : widget.session.plotById(plotId);
+      if (plot != null) _selectFarmPlot(plot);
+      return;
+    }
+    if (markerId.startsWith('building:')) {
+      final parcelId = markerId.substring('building:'.length);
+      setState(() {
+        _selectedParcelId = parcelId;
+        _selectedFarmPlotId = null;
+        _selectedFleetVehicleId = null;
+        _selectedRegionId = null;
+      });
+      HapticFeedback.selectionClick();
+      return;
+    }
+    if (markerId.startsWith('settlement:')) {
+      final settlementId = markerId.substring('settlement:'.length);
+      for (final settlement in _world.settlements) {
+        if (settlement.id != settlementId) continue;
+        final region = _world.regionAt(settlement.position);
+        setState(() {
+          _selectedRegionId = region?.id;
+          _selectedFarmPlotId = null;
+          _selectedParcelId = null;
+          _selectedFleetVehicleId = null;
+        });
+        HapticFeedback.selectionClick();
+        return;
+      }
+    }
+  }
+
+  List<Widget> _isometricMapLabels(
+    List<IsometricMapMarker> markers,
+    MapCameraPose pose,
+  ) {
+    final sortedLabels =
+        markers.where((marker) => marker.label.isNotEmpty).toList()
+          ..sort((a, b) => b.size.compareTo(a.size));
+    final occupied = <Rect>[];
+    final widgets = <Widget>[];
+
+    for (final marker in sortedLabels) {
+      if (marker.kind == IsometricMarkerKind.poi &&
+          marker.size < 32 &&
+          pose.zoom < 0.6) {
         continue;
       }
-      final complete = building.isCompleteAt(now);
-      markers.add(
+      if (marker.id.startsWith('settlement:') &&
+          marker.size <= 24 &&
+          pose.zoom < 0.45) {
+        continue;
+      }
+      if (marker.id.startsWith('settlement:') &&
+          marker.size <= 32 &&
+          pose.zoom < 0.32) {
+        continue;
+      }
+      final point = projectMapPointToScreen(
+        pose,
+        marker.position,
+        _viewportSize,
+      );
+      final width = (marker.label.length * 6.1 + 14)
+          .clamp(48.0, 136.0)
+          .toDouble();
+      final top = point.dy - marker.size * 0.75 - 20;
+      final left = point.dx - width / 2;
+      final rect = Rect.fromLTWH(left, top, width, 22);
+      if (!rect.overlaps(Offset.zero & _viewportSize) ||
+          occupied.any((other) => other.overlaps(rect.inflate(4)))) {
+        continue;
+      }
+      occupied.add(rect);
+      widgets.add(
         Positioned(
-          left: point.dx - extent / 2,
-          top: point.dy - extent / 2,
-          width: extent,
-          height: extent,
-          child: Image.asset(
-            complete
-                ? definition.imageAsset
-                : FarmBuildingCatalog.constructionSiteAsset,
-            fit: BoxFit.contain,
-            cacheWidth: 384,
-            filterQuality: FilterQuality.medium,
+          left: left,
+          top: top,
+          width: width,
+          height: 22,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xEFFFF8E9),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: const Color(0xFFD6C99E)),
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: Text(
+                    marker.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _mapInk,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       );
     }
-    return markers;
+    return widgets;
   }
 
   @override
@@ -1836,68 +1716,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         final tutorialPlot = widget.session.plotById(
           widget.session.starterPlotId,
         );
-        final fieldMachines = <Widget>[];
-        for (final plot in widget.session.plotsWithActiveJobs) {
-          final job = plot.activeJob;
-          if (job == null) continue;
-          final point = Offset(
-            (plot.mapX - _cameraCenter.dx) * _zoom + _viewportSize.width / 2,
-            (plot.mapY - _cameraCenter.dy) * _zoom + _viewportSize.height / 2,
-          );
-          if (point.dx < -80 ||
-              point.dy < -80 ||
-              point.dx > _viewportSize.width + 80 ||
-              point.dy > _viewportSize.height + 80) {
-            continue;
-          }
-          fieldMachines.add(
-            Positioned(
-              left: point.dx - 45 * _fieldMachineScale,
-              top: point.dy - 36 * _fieldMachineScale,
-              child: _MovingFieldMachine(
-                asset:
-                    FarmEquipmentCatalog.byId(job.equipmentId)?.imageAsset ??
-                    job.operation.iconAsset,
-                tractorAsset:
-                    FarmEquipmentCatalog.byId(job.equipmentId)
-                            ?.requiresTractor ==
-                        true
-                    ? FarmEquipmentCatalog.byId(
-                        job.tractorEquipmentId ??
-                            widget.session.equippedTractor?.id ??
-                            '',
-                      )?.imageAsset
-                    : null,
-                progress: _fieldMachineController,
-                scale: _fieldMachineScale,
-                travel: (plot.mapWidth * _zoom * 0.32).clamp(10, 42),
-                label:
-                    FarmEquipmentCatalog.byId(job.equipmentId)?.name ??
-                    job.operation.label,
-              ),
-            ),
-          );
-        }
-        final farmCenter = Offset(
-          (-150 - _cameraCenter.dx) * _zoom + _viewportSize.width / 2,
-          (-120 - _cameraCenter.dy) * _zoom + _viewportSize.height / 2,
-        );
-        final farmWidth = 218 * _zoom;
-        final farmHeight = farmWidth * 0.8;
-        final farmBase = Positioned(
-          left: farmCenter.dx - farmWidth / 2,
-          top: farmCenter.dy - farmHeight / 2,
-          width: farmWidth,
-          height: farmHeight,
-          child: Image.asset(
-            'assets/images/management/topdown-farm-base.png',
-            fit: BoxFit.contain,
-            cacheWidth: 512,
-            filterQuality: FilterQuality.medium,
-          ),
-        );
-        final fleetMarkers = _fleetMapMarkers();
-        final buildingMarkers = _farmBuildingMapMarkers(DateTime.now());
         final playerPoint = selectedPlot == null
             ? Offset(tutorialPlot?.mapX ?? -150, tutorialPlot?.mapY ?? -120)
             : Offset(selectedPlot.mapX, selectedPlot.mapY);
@@ -1925,11 +1743,52 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         final radarOrders = hasMarketOrder
             ? const [Offset(starterMarketMapX, starterMarketMapY)]
             : const <Offset>[];
-        final radarViewport = Rect.fromCenter(
-          center: _cameraCenter,
-          width: _viewportSize.width / _zoom,
-          height: _viewportSize.height / _zoom,
+        final isometricFieldStates = _isometricFieldStates(DateTime.now());
+        final isometricMarkers = _isometricMapMarkers(
+          playerPoint: playerPoint,
+          hasMarketOrder: hasMarketOrder,
         );
+        final visibleIsometricMarkers = _showInfrastructure
+            ? isometricMarkers
+            : isometricMarkers
+                  .where((marker) => !marker.id.startsWith('settlement:'))
+                  .toList(growable: false);
+        final isometricPaths = <IsometricMapPath>[
+          if (_showRoutes)
+            for (final route in widget.session.fleetManager.routes)
+              if (route.isActive && route.stops.length > 1)
+                IsometricMapPath(
+                  id: 'logistics:${route.id}',
+                  points: route.stops
+                      .map(
+                        (stop) =>
+                            WorldMapPoint(stop.positionX, stop.positionY),
+                      )
+                      .toList(growable: false),
+                  color: 0xffe2b64f,
+                  width: 6,
+                ),
+          if (salesRouteStartPlot != null)
+            IsometricMapPath(
+              id: 'sales-route-preview',
+              points: [
+                WorldMapPoint(
+                  salesRouteStartPlot.mapX,
+                  salesRouteStartPlot.mapY,
+                ),
+                const WorldMapPoint(starterMarketMapX, starterMarketMapY),
+              ],
+              color: 0xffe98c3c,
+              width: 8,
+            ),
+          if (_measureStart != null && _measureEnd != null)
+            IsometricMapPath(
+              id: 'measurement',
+              points: [_measureStart!, _measureEnd!],
+              color: 0xfff5efd4,
+              width: 4,
+            ),
+        ];
         final mapInstruction = _salesRouteMode
             ? _InstructionPill(
                 icon: Icons.local_shipping_rounded,
@@ -1961,50 +1820,50 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         return Stack(
           fit: StackFit.expand,
           children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onScaleStart: _onScaleStart,
-              onScaleUpdate: _onScaleUpdate,
-              onScaleEnd: _onScaleEnd,
-              child: CustomPaint(
-                painter: _WorldMapPainter(
-                  world: _world,
-                  session: widget.session,
-                  mapRevision: _mapRevision,
-                  landmarkAtlas: _landmarkAtlas,
-                  fieldTextureAtlas: _fieldTextureAtlas,
-                  cameraCenter: _cameraCenter,
-                  zoom: _zoom,
-                  selectedParcelId: _selectedParcelId,
-                  selectedRegionId: _selectedRegionId,
-                  selectedFarmPlotId: _selectedFarmPlotId,
-                  routeStartParcelId: _routeStartParcelId,
-                  salesRouteStartPlotId: _salesRouteStartPlotId,
-                  salesRouteMode: _salesRouteMode,
-                  salesRouteStart: salesRouteStartPlot == null
-                      ? null
-                      : Offset(
-                          salesRouteStartPlot.mapX,
-                          salesRouteStartPlot.mapY,
-                        ),
-                  measureStart: _measureStart,
-                  measureEnd: _measureEnd,
-                  showParcels: _showParcels,
-                  showRoutes: _showRoutes,
-                  showInfrastructure: _showInfrastructure,
-                  showFertility: _showFertility,
-                ),
+            IsometricWorldMapView(
+              world: _world,
+              ownedParcelIds: {
+                ...widget.session.state.ownedWorldParcelIds,
+                for (final plot in widget.session.plots)
+                  if (plot.isOwned && plot.mapParcelId != null)
+                    plot.mapParcelId!,
+              },
+              selectedParcelId:
+                  _selectedParcelId ?? selectedPlot?.mapParcelId,
+              cameraPose: MapCameraPose(
+                center: WorldMapPoint(_cameraCenter.dx, _cameraCenter.dy),
+                zoom: _zoom,
               ),
+              onCameraChanged: (pose) {
+                _setCameraPose(
+                  Offset(pose.center.x, pose.center.y),
+                  pose.zoom.clamp(_minZoom, _maxZoom).toDouble(),
+                );
+              },
+              onWorldTap: (point, localPosition) => _handleMapTap(
+                localPosition,
+                worldPoint: point,
+                hitTopDownVehicleMarkers: false,
+              ),
+              onMarkerTap: _handleIsometricMarkerTap,
+              fieldStates: isometricFieldStates,
+              fieldCropIds: _isometricFieldCropIds(),
+              markers: visibleIsometricMarkers,
+              paths: isometricPaths,
+              showParcels: _showParcels,
+              showRoutes: _showRoutes,
+              showInfrastructure: _showInfrastructure,
             ),
-            IgnorePointer(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  farmBase,
-                  ...buildingMarkers,
-                  ...fieldMachines,
-                  ...fleetMarkers,
-                ],
+            ValueListenableBuilder<MapCameraPose>(
+              valueListenable: _cameraPoseListenable,
+              builder: (context, pose, child) => IgnorePointer(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: _isometricMapLabels(
+                    visibleIsometricMarkers,
+                    pose,
+                  ),
+                ),
               ),
             ),
             Positioned(
@@ -2071,11 +1930,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                                     setState(() {
                                       if (starter != null) {
                                         _selectedFarmPlotId = starter.id;
-                                        _cameraCenter = Offset(
-                                          starter.mapX,
-                                          starter.mapY,
+                                        _setCameraPose(
+                                          Offset(starter.mapX, starter.mapY),
+                                          0.9,
                                         );
-                                        _zoom = 0.9;
                                       }
                                     });
                                   },
@@ -2088,23 +1946,35 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                                 !_measureMode &&
                                 !_constructionPlacementMode) ...[
                               const SizedBox(width: 8),
-                              FarmRadarMiniMap(
-                                home: const Offset(-150, -120),
-                                player: playerPoint,
-                                viewport: radarViewport,
-                                trucks: radarTrucks,
-                                orders: radarOrders,
-                                fields: radarFields,
-                                routes: radarRoutes,
-                                onTap: () => setState(() {
-                                  _cameraCenter = playerPoint;
-                                  _zoom = math.max(_zoom, 0.72).toDouble();
-                                  _selectedParcelId = null;
-                                  _selectedFarmPlotId =
-                                      selectedPlot?.id ??
-                                      widget.session.starterPlotId;
-                                  _selectedFleetVehicleId = null;
-                                }),
+                              ValueListenableBuilder<MapCameraPose>(
+                                valueListenable: _cameraPoseListenable,
+                                builder: (context, pose, _) => FarmRadarMiniMap(
+                                  home: const Offset(-150, -120),
+                                  player: playerPoint,
+                                  viewport: Rect.fromCenter(
+                                    center: Offset(
+                                      pose.center.x,
+                                      pose.center.y,
+                                    ),
+                                    width: _viewportSize.width / pose.zoom,
+                                    height: _viewportSize.height / pose.zoom,
+                                  ),
+                                  trucks: radarTrucks,
+                                  orders: radarOrders,
+                                  fields: radarFields,
+                                  routes: radarRoutes,
+                                  onTap: () => setState(() {
+                                    _setCameraPose(
+                                      playerPoint,
+                                      math.max(_zoom, 0.72).toDouble(),
+                                    );
+                                    _selectedParcelId = null;
+                                    _selectedFarmPlotId =
+                                        selectedPlot?.id ??
+                                        widget.session.starterPlotId;
+                                    _selectedFleetVehicleId = null;
+                                  }),
+                                ),
                               ),
                             ],
                           ],
@@ -2124,18 +1994,19 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               bottom: panelLift + 4,
               child: _ZoomControls(
                 onZoomIn: () => setState(
-                  () => _zoom = (_zoom * 1.24)
-                      .clamp(_minZoom, _maxZoom)
-                      .toDouble(),
+                  () => _setCameraPose(
+                    _cameraCenter,
+                    (_zoom * 1.24).clamp(_minZoom, _maxZoom).toDouble(),
+                  ),
                 ),
                 onZoomOut: () => setState(
-                  () => _zoom = (_zoom / 1.24)
-                      .clamp(_minZoom, _maxZoom)
-                      .toDouble(),
+                  () => _setCameraPose(
+                    _cameraCenter,
+                    (_zoom / 1.24).clamp(_minZoom, _maxZoom).toDouble(),
+                  ),
                 ),
                 onRecenter: () => setState(() {
-                  _cameraCenter = const Offset(-150, -120);
-                  _zoom = 0.64;
+                  _setCameraPose(const Offset(-150, -120), 0.64);
                   _selectedParcelId = null;
                   _selectedFarmPlotId = widget.session.starterPlotId;
                   _selectedFleetVehicleId = null;
@@ -2437,43 +2308,56 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   onOpenLayers: _openLayerOptions,
                 ),
               ),
-            if (_zoom < 0.31)
-              Positioned(
-                left: 14,
-                bottom: selectedPanelHeight > 0
-                    ? panelLift + 48
-                    : safeBottom + 110,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xEAF8F1DB),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFCFD2A4)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.circle, size: 9, color: Color(0xFF82A85D)),
-                      SizedBox(width: 6),
-                      Text(
-                        'Sahip olunan araziler',
-                        style: TextStyle(
-                          color: _mapInk,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
+            ValueListenableBuilder<MapCameraPose>(
+              valueListenable: _cameraPoseListenable,
+              builder: (context, pose, _) => pose.zoom < 0.31
+                  ? Positioned(
+                      left: 14,
+                      bottom: selectedPanelHeight > 0
+                          ? panelLift + 48
+                          : safeBottom + 110,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xEAF8F1DB),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFCFD2A4)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              size: 9,
+                              color: Color(0xFF82A85D),
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Sahip olunan araziler',
+                              style: TextStyle(
+                                color: _mapInk,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            ValueListenableBuilder<MapCameraPose>(
+              valueListenable: _cameraPoseListenable,
+              builder: (context, pose, _) => Positioned(
+                left: 14,
+                bottom: selectedPanelHeight > 0
+                    ? panelLift + 8
+                    : safeBottom + 66,
+                child: _MapScaleBar(zoom: pose.zoom),
               ),
-            Positioned(
-              left: 14,
-              bottom: selectedPanelHeight > 0 ? panelLift + 8 : safeBottom + 66,
-              child: _MapScaleBar(zoom: _zoom),
             ),
           ],
         );
@@ -3577,91 +3461,6 @@ class _WarehouseInventorySheet extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _MovingFieldMachine extends StatelessWidget {
-  const _MovingFieldMachine({
-    required this.asset,
-    required this.progress,
-    required this.scale,
-    required this.travel,
-    required this.label,
-    this.tractorAsset,
-  });
-
-  final String asset;
-  final String? tractorAsset;
-  final Animation<double> progress;
-  final double scale;
-  final double travel;
-  final String label;
-
-  Widget _machineView() {
-    if (tractorAsset == null) {
-      return Image.asset(
-        asset,
-        width: 82 * scale,
-        height: 62 * scale,
-        fit: BoxFit.contain,
-        cacheWidth: 176,
-        filterQuality: FilterQuality.medium,
-      );
-    }
-    return SizedBox(
-      width: 90 * scale,
-      height: 72 * scale,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned(
-            top: 23 * scale,
-            child: Image.asset(
-              asset,
-              width: 56 * scale,
-              height: 42 * scale,
-              fit: BoxFit.contain,
-              cacheWidth: 144,
-              filterQuality: FilterQuality.medium,
-            ),
-          ),
-          Positioned(
-            top: 0,
-            child: Image.asset(
-              tractorAsset!,
-              width: 54 * scale,
-              height: 45 * scale,
-              fit: BoxFit.contain,
-              cacheWidth: 144,
-              filterQuality: FilterQuality.medium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Tooltip(message: label, child: _machineView());
-    if (MediaQuery.of(context).disableAnimations) return child;
-    return AnimatedBuilder(
-      animation: progress,
-      child: child,
-      builder: (context, child) {
-        final phase = progress.value * math.pi * 2;
-        final point = Offset(
-          math.cos(phase) * travel * 0.5,
-          math.sin(phase) * travel * 0.23,
-        );
-        final tangent = Offset(-math.sin(phase), math.cos(phase) * 0.46);
-        final heading = math.atan2(tangent.dy, tangent.dx) + math.pi / 2;
-        return Transform.translate(
-          offset: point,
-          child: Transform.rotate(angle: heading, child: child),
-        );
-      },
     );
   }
 }
@@ -7010,2463 +6809,6 @@ class _MapStatusChip extends StatelessWidget {
   );
 }
 
-class _WorldMapPainter extends CustomPainter {
-  _WorldMapPainter({
-    required this.world,
-    required this.session,
-    required this.mapRevision,
-    required this.landmarkAtlas,
-    required this.fieldTextureAtlas,
-    required this.cameraCenter,
-    required this.zoom,
-    required this.selectedParcelId,
-    required this.selectedRegionId,
-    required this.selectedFarmPlotId,
-    required this.routeStartParcelId,
-    required this.salesRouteStartPlotId,
-    required this.salesRouteMode,
-    required this.salesRouteStart,
-    required this.measureStart,
-    required this.measureEnd,
-    required this.showParcels,
-    required this.showRoutes,
-    required this.showInfrastructure,
-    required this.showFertility,
-  });
-
-  final ProceduralFarmWorld world;
-  final OpeningSession session;
-  final int mapRevision;
-  final FarmMapLandmarkAtlas landmarkAtlas;
-  final FarmFieldTextureAtlas fieldTextureAtlas;
-  final Offset cameraCenter;
-  final double zoom;
-  final String? selectedParcelId;
-  final String? selectedRegionId;
-  final int? selectedFarmPlotId;
-  final String? routeStartParcelId;
-  final int? salesRouteStartPlotId;
-  final bool salesRouteMode;
-  final Offset? salesRouteStart;
-  final WorldMapPoint? measureStart;
-  final WorldMapPoint? measureEnd;
-  final bool showParcels;
-  final bool showRoutes;
-  final bool showInfrastructure;
-  final bool showFertility;
-  final List<_PendingMapLabel> _pendingLabels = [];
-  late _MapOverlayCollisionLayout _overlayLayout;
-  int _nextLabelOrder = 0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    _pendingLabels.clear();
-    _nextLabelOrder = 0;
-    _overlayLayout = _MapOverlayCollisionLayout(
-      viewportSize: size,
-      cameraCenter: cameraCenter,
-      zoom: zoom,
-    );
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF31583A),
-    );
-    final visible = Rect.fromCenter(
-      center: cameraCenter,
-      width: size.width / zoom,
-      height: size.height / zoom,
-    );
-    final leftChunk = ((visible.left / farmWorldChunkSize).floor() - 1).clamp(
-      ProceduralFarmWorld.minChunkX,
-      ProceduralFarmWorld.maxChunkX,
-    );
-    final rightChunk = ((visible.right / farmWorldChunkSize).floor() + 1).clamp(
-      ProceduralFarmWorld.minChunkX,
-      ProceduralFarmWorld.maxChunkX,
-    );
-    final topChunk = ((visible.top / farmWorldChunkSize).floor() - 1).clamp(
-      ProceduralFarmWorld.minChunkY,
-      ProceduralFarmWorld.maxChunkY,
-    );
-    final bottomChunk = ((visible.bottom / farmWorldChunkSize).floor() + 1)
-        .clamp(ProceduralFarmWorld.minChunkY, ProceduralFarmWorld.maxChunkY);
-
-    canvas.save();
-    canvas.translate(
-      size.width / 2 - cameraCenter.dx * zoom,
-      size.height / 2 - cameraCenter.dy * zoom,
-    );
-    canvas.scale(zoom);
-
-    final chunks = <WorldMapChunk>[];
-    for (var y = topChunk; y <= bottomChunk; y++) {
-      for (var x = leftChunk; x <= rightChunk; x++) {
-        final chunk = world.chunkAt(x, y);
-        chunks.add(chunk);
-        _drawTerrain(canvas, chunk);
-      }
-    }
-    _drawAgriculturalRegions(canvas, visible);
-    for (final chunk in chunks) {
-      _drawMountains(canvas, chunk);
-    }
-    for (final chunk in chunks) {
-      _drawTrees(canvas, chunk);
-    }
-    if (showRoutes) {
-      _drawRoadNetwork(canvas, visible);
-    }
-    if (showParcels) {
-      final visibleParcelIds = <String>{};
-      for (final chunk in chunks) {
-        for (final parcel in chunk.parcels) {
-          visibleParcelIds.add(parcel.id);
-          _drawParcel(canvas, parcel);
-        }
-      }
-      final persistedParcelIds = {
-        ...session.state.ownedWorldParcelIds,
-        ...session.plots.map((plot) => plot.mapParcelId).whereType<String>(),
-      };
-      for (final id in persistedParcelIds) {
-        if (visibleParcelIds.contains(id)) continue;
-        final parcel = world.parcelById(id, searchRadius: 2);
-        if (parcel == null || parcel.isHome) continue;
-        final parcelBounds = Rect.fromCenter(
-          center: Offset(parcel.center.x, parcel.center.y),
-          width: parcel.width,
-          height: parcel.height,
-        );
-        if (!parcelBounds.inflate(35).overlaps(visible)) continue;
-        visibleParcelIds.add(id);
-        _drawParcel(canvas, parcel);
-      }
-    }
-    // Draw connected water after roads and fields so their interiors remain
-    // legible. Bridge decks sit above the water layer at valid crossings.
-    _drawWatercourses(canvas, visible);
-    _drawLakes(canvas, visible);
-    for (final chunk in chunks) {
-      _drawPonds(canvas, chunk, visible);
-    }
-    if (showRoutes) _drawBridges(canvas, visible);
-    _drawSettlements(canvas, visible);
-    if (zoom < 0.31) _drawDistrictLabels(canvas, visible);
-    if (showRoutes) _drawLogistics(canvas);
-    if (showInfrastructure) {
-      for (final chunk in chunks) {
-        for (final poi in chunk.pointsOfInterest) {
-          if (poi.type == WorldPointOfInterestType.village) continue;
-          _drawPointOfInterest(canvas, poi);
-        }
-      }
-    }
-    _drawLocalFarmPlots(canvas);
-    if (salesRouteMode && salesRouteStart != null) {
-      _drawSalesRoutePreview(canvas, salesRouteStart!);
-    }
-    _drawSalesPoint(canvas, highlighted: salesRouteMode);
-    _drawMeasurements(canvas);
-    _drawPendingMapLabels(canvas);
-    _drawWorldBoundaries(canvas);
-    canvas.restore();
-
-    _drawVignette(canvas, size);
-  }
-
-  void _drawTerrain(Canvas canvas, WorldMapChunk chunk) {
-    final rect = Rect.fromLTWH(
-      chunk.x * farmWorldChunkSize,
-      chunk.y * farmWorldChunkSize,
-      farmWorldChunkSize,
-      farmWorldChunkSize,
-    );
-    canvas.drawRect(rect, Paint()..color = const Color(0xFF416B43));
-    final seed = world.seed + chunk.x * 15485863 + chunk.y * 32452843;
-    final random = math.Random(seed);
-    final patchPaint = Paint()..style = PaintingStyle.fill;
-    const patchColors = [0x124E773E, 0x18436A3B, 0x12598245, 0x0D8E9154];
-    for (var i = 0; i < 16; i++) {
-      patchPaint.color = Color(patchColors[random.nextInt(patchColors.length)]);
-      final x = rect.left + random.nextDouble() * rect.width;
-      final y = rect.top + random.nextDouble() * rect.height;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(x, y),
-          width: 60 + random.nextDouble() * 160,
-          height: 45 + random.nextDouble() * 130,
-        ),
-        patchPaint,
-      );
-    }
-    final edgePaint = Paint()
-      ..color = const Color(0x14313E24)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawRect(rect, edgePaint);
-  }
-
-  void _drawMountains(Canvas canvas, WorldMapChunk chunk) {
-    for (final mountain in chunk.mountains) {
-      canvas.save();
-      canvas.translate(mountain.center.x, mountain.center.y);
-      canvas.rotate(mountain.ridgeAngle);
-      final seed =
-          world.seed ^
-          (mountain.center.x.round() * 73856093) ^
-          (mountain.center.y.round() * 19349663);
-      final rings = <Path>[
-        for (final fraction in const [1.0, 0.79, 0.59, 0.40, 0.22])
-          _topographicContourPath(
-            mountain.width,
-            mountain.height,
-            fraction,
-            seed,
-          ),
-      ];
-      canvas.drawPath(rings.first, Paint()..color = const Color(0x184D5A3C));
-
-      final shownLevels = zoom < 0.31
-          ? const {0, 2, 4}
-          : zoom < 0.65
-          ? const {0, 1, 3, 4}
-          : const {0, 1, 2, 3, 4};
-      for (var level = 0; level < rings.length; level++) {
-        if (!shownLevels.contains(level)) continue;
-        final isIndexContour = level == 4;
-        canvas.drawPath(
-          rings[level],
-          Paint()
-            ..color = isIndexContour
-                ? const Color(0xB27A6240)
-                : const Color(0x827B7454)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = (isIndexContour ? 1.45 : 0.82) / zoom
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
-      canvas.restore();
-    }
-  }
-
-  void _drawAgriculturalRegions(Canvas canvas, Rect visible) {
-    for (final region in world.regions) {
-      final points = region.boundary;
-      if (points.length < 3) continue;
-      final path = Path()..moveTo(points.first.x, points.first.y);
-      for (final point in points.skip(1)) {
-        path.lineTo(point.x, point.y);
-      }
-      path.close();
-      if (!path.getBounds().overlaps(visible)) continue;
-
-      final selected = region.id == selectedRegionId;
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = Color(region.soilColor)
-              .withValues(alpha: selected ? 0.29 : 0.185),
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = selected ? const Color(0xE8F2D17B) : const Color(0x644C6846)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = (selected ? 4.0 : 1.35) / zoom
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
-  }
-
-  void _drawWatercourses(Canvas canvas, Rect visible) {
-    for (final watercourse in world.watercourses) {
-      if (watercourse.points.length < 2) continue;
-      final path = _smoothWatercoursePath(watercourse.points);
-      if (!path.getBounds().inflate(watercourse.width).overlaps(visible)) {
-        continue;
-      }
-
-      final isCanal =
-          watercourse.type == WorldMapWatercourseType.irrigationCanal;
-      final isRiver = watercourse.type == WorldMapWatercourseType.river;
-      final lineWidth = watercourse.width.clamp(7.0, 120.0).toDouble();
-      final bankColor = isCanal
-          ? const Color(0xFF99865C)
-          : isRiver
-          ? const Color(0xFF83795D)
-          : const Color(0xFF718167);
-      final shallowColor = isCanal
-          ? const Color(0xFF79B2A5)
-          : const Color(0xFF75B8B1);
-      final waterColor = isRiver
-          ? const Color(0xFF347E89)
-          : isCanal
-          ? const Color(0xFF559A99)
-          : const Color(0xFF4C9296);
-
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0x40303A2C)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth + (isCanal ? 21 : 34)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xFF627456).withValues(alpha: 0.88)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth + (isCanal ? 15 : 26)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = bankColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth + (isCanal ? 8 : 16)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = shallowColor.withValues(alpha: 0.78)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth + (isCanal ? 3 : 7)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      final waterBounds = path.getBounds().inflate(lineWidth * 0.55);
-      canvas.drawPath(
-        path,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            waterBounds.topLeft,
-            waterBounds.bottomRight,
-            [
-              Color.lerp(waterColor, const Color(0xFFB5D5C4), 0.24)!,
-              waterColor,
-              Color.lerp(waterColor, const Color(0xFF203F4E), 0.38)!,
-            ],
-            const [0, 0.58, 1],
-          )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = lineWidth
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0x66306070)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(2.0, lineWidth * 0.34)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      if (!isCanal) {
-        _drawWaterFlowHighlights(canvas, path, lineWidth, visible);
-      } else if (zoom >= 0.62) {
-        _drawDashPath(
-          canvas,
-          path,
-          Paint()
-            ..color = const Color(0x776FD0C0)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = math.max(1.1, 1.5 / zoom)
-            ..strokeCap = StrokeCap.round,
-          dash: 22 / zoom,
-          gap: 80 / zoom,
-        );
-      }
-      if (zoom >= 0.46) {
-        _drawDashPath(
-          canvas,
-          path,
-          Paint()
-            ..color = const Color(0x747FD1C5)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = math.max(1.2, 1.7 / zoom)
-            ..strokeCap = StrokeCap.round,
-          dash: 16 / zoom,
-          gap: 52 / zoom,
-        );
-      }
-
-      if (zoom < 0.37) {
-        final labelPoint = watercourse.points[watercourse.points.length ~/ 2];
-        final labelCenter = Offset(labelPoint.x, labelPoint.y);
-        if (visible.contains(labelCenter)) {
-          _drawScreenMapLabel(watercourse.name, labelCenter, priority: 35);
-        }
-      }
-    }
-  }
-
-  Path _smoothWatercoursePath(List<WorldMapPoint> points) {
-    final path = Path()..moveTo(points.first.x, points.first.y);
-    if (points.length == 2) {
-      path.lineTo(points.last.x, points.last.y);
-      return path;
-    }
-    for (var index = 0; index < points.length - 1; index++) {
-      final previous = points[index == 0 ? index : index - 1];
-      final current = points[index];
-      final next = points[index + 1];
-      final following =
-          points[index + 2 < points.length ? index + 2 : index + 1];
-      final control1 = Offset(
-        current.x + (next.x - previous.x) / 6,
-        current.y + (next.y - previous.y) / 6,
-      );
-      final control2 = Offset(
-        next.x - (following.x - current.x) / 6,
-        next.y - (following.y - current.y) / 6,
-      );
-      path.cubicTo(
-        control1.dx,
-        control1.dy,
-        control2.dx,
-        control2.dy,
-        next.x,
-        next.y,
-      );
-    }
-    return path;
-  }
-
-  void _drawWaterFlowHighlights(
-    Canvas canvas,
-    Path path,
-    double width,
-    Rect visible,
-  ) {
-    if (zoom < 0.34) return;
-    final metrics = path.computeMetrics();
-    for (final metric in metrics) {
-      final spacing = math.max(44.0, 86 / zoom);
-      for (
-        var distance = spacing * 0.45;
-        distance < metric.length;
-        distance += spacing
-      ) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent == null ||
-            !visible.inflate(width).contains(tangent.position)) {
-          continue;
-        }
-        final vector = tangent.vector;
-        final length = math.max(5.0, width * 0.26);
-        final center =
-            tangent.position +
-            Offset(-vector.dy, vector.dx) *
-                (math.sin(distance * 0.017) * width * 0.15);
-        canvas.drawLine(
-          center - vector * (length * 0.5),
-          center + vector * (length * 0.5),
-          Paint()
-            ..color = const Color(0x88B4E2D0)
-            ..strokeWidth = math.max(1.0, 1.25 / zoom)
-            ..strokeCap = StrokeCap.round,
-        );
-      }
-    }
-  }
-
-  void _drawLakes(Canvas canvas, Rect visible) {
-    for (final lake in world.lakes) {
-      if (lake.shoreline.length < 4 ||
-          !lake.bounds.inflate(56).overlaps(visible)) {
-        continue;
-      }
-      final shore = _smoothClosedPolygon(lake.shoreline);
-      final bounds = shore.getBounds();
-      canvas.drawPath(
-        shore.shift(const Offset(0, 8)),
-        Paint()..color = const Color(0x3D293628),
-      );
-      canvas.drawPath(
-        shore,
-        Paint()
-          ..color = const Color(0xFF748469)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 44
-          ..strokeJoin = StrokeJoin.round,
-      );
-      canvas.drawPath(
-        shore,
-        Paint()
-          ..color = const Color(0xFFC3AC78)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 28
-          ..strokeJoin = StrokeJoin.round,
-      );
-      final baseWater = Color(lake.waterColor);
-      canvas.drawPath(
-        shore,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            bounds.topLeft,
-            bounds.bottomRight,
-            [
-              Color.lerp(baseWater, const Color(0xFFA9D4C8), 0.4)!,
-              baseWater,
-              Color.lerp(baseWater, const Color(0xFF234E60), 0.44)!,
-            ],
-            const [0, 0.56, 1],
-          ),
-      );
-      canvas.drawPath(
-        shore,
-        Paint()
-          ..color = const Color(0x887EC9BE)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(2.0, 3.0 / zoom)
-          ..strokeJoin = StrokeJoin.round,
-      );
-      final centerTint = Color.lerp(baseWater, const Color(0xFF214E5B), 0.36)!;
-      canvas.save();
-      canvas.translate(bounds.center.dx, bounds.center.dy);
-      canvas.scale(0.68);
-      canvas.translate(-bounds.center.dx, -bounds.center.dy);
-      canvas.drawPath(
-        shore,
-        Paint()
-          ..color = centerTint.withValues(alpha: 0.48)
-          ..style = PaintingStyle.fill,
-      );
-      canvas.restore();
-
-      if (zoom >= 0.42) {
-        final seed = lake.id.codeUnits.fold<int>(
-          0x1F123BB5,
-          (hash, code) => ((hash * 33) ^ code) & 0x7fffffff,
-        );
-        final random = math.Random(seed);
-        final ripplePaint = Paint()
-          ..color = const Color(0x799EDBCB)
-          ..strokeWidth = math.max(1.1, 1.5 / zoom)
-          ..strokeCap = StrokeCap.round;
-        var ripplesDrawn = 0;
-        for (var attempt = 0; attempt < 90 && ripplesDrawn < 32; attempt++) {
-          final point = Offset(
-            bounds.left + random.nextDouble() * bounds.width,
-            bounds.top + random.nextDouble() * bounds.height,
-          );
-          if (!shore.contains(point)) continue;
-          final length = 8 + random.nextDouble() * 24;
-          final angle = (random.nextDouble() - 0.5) * 0.32;
-          final direction = Offset(math.cos(angle), math.sin(angle));
-          canvas.drawLine(
-            point - direction * (length * 0.5),
-            point + direction * (length * 0.5),
-            ripplePaint,
-          );
-          ripplesDrawn++;
-        }
-      }
-
-      final label = Offset(lake.labelPosition.x, lake.labelPosition.y);
-      if (zoom < 0.42 && visible.contains(label)) {
-        _drawScreenMapLabel(lake.name.toUpperCase(), label, priority: 35);
-      }
-    }
-  }
-
-  Path _smoothClosedPolygon(List<WorldMapPoint> points) {
-    final firstMidpoint = Offset(
-      (points.last.x + points.first.x) / 2,
-      (points.last.y + points.first.y) / 2,
-    );
-    final path = Path()..moveTo(firstMidpoint.dx, firstMidpoint.dy);
-    for (var index = 0; index < points.length; index++) {
-      final point = points[index];
-      final next = points[(index + 1) % points.length];
-      final midpoint = Offset((point.x + next.x) / 2, (point.y + next.y) / 2);
-      path.quadraticBezierTo(point.x, point.y, midpoint.dx, midpoint.dy);
-    }
-    return path..close();
-  }
-
-  void _drawSalesRoutePreview(Canvas canvas, Offset start) {
-    final end = const Offset(starterMarketMapX, starterMarketMapY);
-    final path = Path()
-      ..moveTo(start.dx, start.dy)
-      ..quadraticBezierTo(
-        (start.dx + end.dx) / 2 + (end.dy - start.dy) * 0.12,
-        (start.dy + end.dy) / 2 - (end.dx - start.dx) * 0.12,
-        end.dx,
-        end.dy,
-      );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xCCFFE28B)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4 / zoom
-        ..strokeCap = StrokeCap.round,
-    );
-    _drawDashPath(
-      canvas,
-      path,
-      Paint()
-        ..color = const Color(0xFF385D3C)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 / zoom
-        ..strokeCap = StrokeCap.round,
-      dash: 11 / zoom,
-      gap: 8 / zoom,
-    );
-  }
-
-  void _drawSalesPoint(Canvas canvas, {required bool highlighted}) {
-    _overlayLayout.addIconAtWorld(
-      const Offset(starterMarketMapX, starterMarketMapY),
-      const Size(88, 76),
-    );
-    canvas.save();
-    canvas.translate(starterMarketMapX, starterMarketMapY);
-    canvas.scale(1 / zoom);
-    canvas.drawCircle(
-      Offset.zero,
-      highlighted ? 36 : 31,
-      Paint()
-        ..color = highlighted
-            ? const Color(0x77FFD45C)
-            : const Color(0x55313E24),
-    );
-    if (highlighted) {
-      canvas.drawCircle(
-        Offset.zero,
-        38,
-        Paint()
-          ..color = const Color(0xFFFFC84F)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.4,
-      );
-    }
-    canvas.restore();
-
-    if (landmarkAtlas.isReady) {
-      landmarkAtlas.drawAt(
-        canvas: canvas,
-        index: 2,
-        worldCenter: const Offset(starterMarketMapX, starterMarketMapY),
-        zoom: zoom,
-        screenWidth: 82,
-        screenHeight: 68,
-      );
-    } else {
-      canvas.save();
-      canvas.translate(starterMarketMapX, starterMarketMapY);
-      canvas.scale(1 / zoom);
-      canvas.drawCircle(
-        Offset.zero,
-        19,
-        Paint()..color = const Color(0xFF234D36),
-      );
-      canvas.drawCircle(
-        Offset.zero,
-        14,
-        Paint()..color = const Color(0xFFFFF2D0),
-      );
-      _drawMapIcon(
-        canvas,
-        Icons.storefront_rounded,
-        Offset.zero,
-        19,
-        const Color(0xFF9B5F3D),
-      );
-      canvas.restore();
-    }
-    _drawScreenMapLabel(
-      'KASABA PAZARI',
-      const Offset(starterMarketMapX, starterMarketMapY + 42),
-      priority: 110,
-    );
-  }
-
-  void _drawOwnedParcelMarker(
-    Canvas canvas,
-    Offset center, {
-    required bool selected,
-  }) {
-    _overlayLayout.addIconAtWorld(
-      center,
-      Size(selected ? 21 : 18, selected ? 21 : 18),
-    );
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.scale(1 / zoom);
-    canvas.drawCircle(
-      Offset.zero,
-      selected ? 9 : 7.3,
-      Paint()..color = const Color(0xEE173B2B),
-    );
-    canvas.drawCircle(
-      Offset.zero,
-      selected ? 6.2 : 4.8,
-      Paint()
-        ..color = selected ? const Color(0xFFFFC84F) : const Color(0xFFB9E38B),
-    );
-    canvas.drawCircle(Offset.zero, 2, Paint()..color = const Color(0xFFF8F0D7));
-    canvas.restore();
-  }
-
-  Path _topographicContourPath(
-    double width,
-    double height,
-    double scale,
-    int seed,
-  ) {
-    const pointCount = 28;
-    final phase = (seed.abs() % 100000) / 100000 * math.pi * 2;
-    final points = List<Offset>.generate(pointCount, (index) {
-      final angle = math.pi * 2 * index / pointCount;
-      final irregularity =
-          1 +
-          0.035 * math.sin(angle * 3 + phase) +
-          0.022 * math.sin(angle * 5 + phase * 1.7) +
-          0.012 * math.sin(angle * 7 - phase * 0.8);
-      return Offset(
-        math.cos(angle) * width * 0.5 * scale * irregularity,
-        math.sin(angle) * height * 0.5 * scale * irregularity,
-      );
-    }, growable: false);
-    Offset midpoint(Offset first, Offset second) =>
-        Offset.lerp(first, second, 0.5)!;
-    final path = Path()
-      ..moveTo(
-        midpoint(points.last, points.first).dx,
-        midpoint(points.last, points.first).dy,
-      );
-    for (var index = 0; index < points.length; index++) {
-      final next = points[(index + 1) % points.length];
-      final end = midpoint(points[index], next);
-      path.quadraticBezierTo(
-        points[index].dx,
-        points[index].dy,
-        end.dx,
-        end.dy,
-      );
-    }
-    return path..close();
-  }
-
-  void _drawDistrictLabels(Canvas canvas, Rect visible) {
-    if (zoom >= 0.31) return;
-    for (final region in world.regions) {
-      final point = Offset(region.labelPosition.x, region.labelPosition.y);
-      if (!visible.contains(point)) continue;
-      final cropName = switch (region.favoredCrop) {
-        WorldCropType.grain => 'TAHIL OVASI',
-        WorldCropType.oilseed => 'YAĞLI TOHUM',
-        WorldCropType.vegetable => 'SEBZE TARIMI',
-        WorldCropType.pasture => 'YAYLA VE MERA',
-      };
-      _drawScreenMapLabel(
-        '${region.name.toUpperCase()}\n${region.landform.toUpperCase()} · $cropName',
-        point,
-        priority: 25,
-      );
-    }
-  }
-
-  void _drawRoadNetwork(Canvas canvas, Rect visible) {
-    final roads = world.roadSegmentsInBounds(
-      visible.left,
-      visible.top,
-      visible.right,
-      visible.bottom,
-      includeLocal: zoom >= 0.3,
-    );
-    for (final road in roads) {
-      if (road.type == WorldMapRoadType.trail && zoom < 0.62) continue;
-      if (road.points.length < 2) continue;
-      _overlayLayout.addWorldPolyline(
-        road.points
-            .map((point) => Offset(point.x, point.y))
-            .toList(growable: false),
-        road.width + 13,
-      );
-      final path = Path()..moveTo(road.points.first.x, road.points.first.y);
-      for (final point in road.points.skip(1)) {
-        path.lineTo(point.x, point.y);
-      }
-      _strokeRoad(canvas, path, road);
-    }
-  }
-
-  void _strokeRoad(Canvas canvas, Path path, WorldMapRoad road) {
-    final width = road.width;
-    final isArterial = road.type == WorldMapRoadType.arterial;
-    final isSecondary = road.type == WorldMapRoadType.secondary;
-    final isTrail = road.type == WorldMapRoadType.trail;
-    final shoulder = isArterial
-        ? const Color(0xFF74654C)
-        : isSecondary
-        ? const Color(0xFF716348)
-        : isTrail
-        ? const Color(0xFF554D38)
-        : const Color(0xFF5F513A);
-    final earth = isArterial
-        ? const Color(0xFFC9B486)
-        : isSecondary
-        ? const Color(0xFFBFA779)
-        : isTrail
-        ? const Color(0xFF8B815C)
-        : const Color(0xFFAF986A);
-    final surface = isArterial
-        ? const Color(0xFFD5C39A)
-        : isSecondary
-        ? const Color(0xFFD0BB8D)
-        : isTrail
-        ? const Color(0xFF9E9066)
-        : const Color(0xFFC5AA76);
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0x3831261C)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width + 13
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = shoulder
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width + 8
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = earth
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width + 3.8
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = surface
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0x48FFF1D2)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = math.max(1.0, width * 0.1)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    if (zoom >= 0.42) _drawRoadSurfaceGrain(canvas, path, road);
-    if (isArterial && zoom >= 0.5) {
-      _drawDashPath(
-        canvas,
-        path,
-        Paint()
-          ..color = const Color(0x88765F39)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1, 1.2 / zoom),
-        dash: 30 / zoom,
-        gap: 48 / zoom,
-      );
-    }
-    if (!isArterial && !isTrail && zoom >= 0.86) {
-      _drawDashPath(
-        canvas,
-        path,
-        Paint()
-          ..color = const Color(0x55483D2C)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1, 1.1 / zoom)
-          ..strokeCap = StrokeCap.round,
-        dash: 16 / zoom,
-        gap: 21 / zoom,
-      );
-    }
-  }
-
-  void _drawRoadSurfaceGrain(Canvas canvas, Path path, WorldMapRoad road) {
-    final metrics = path.computeMetrics();
-    final seed = road.id.codeUnits.fold<int>(
-      0x45D9F3B,
-      (hash, code) => ((hash * 31) ^ code) & 0x7fffffff,
-    );
-    final random = math.Random(seed);
-    final radius = math.max(0.55, road.width * 0.035);
-    final step = math.max(24.0, 30 / zoom);
-    for (final metric in metrics) {
-      for (
-        var distance = step * 0.55;
-        distance < metric.length;
-        distance += step
-      ) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent == null) continue;
-        final normal = Offset(-tangent.vector.dy, tangent.vector.dx);
-        final side = (random.nextDouble() - 0.5) * road.width * 0.62;
-        final grain = tangent.position + normal * side;
-        final size = radius * (0.45 + random.nextDouble() * 0.9);
-        canvas.drawCircle(
-          grain,
-          size,
-          Paint()
-            ..color = random.nextBool()
-                ? const Color(0x40746043)
-                : const Color(0x36FFF2CD),
-        );
-      }
-    }
-  }
-
-  void _drawBridges(Canvas canvas, Rect visible) {
-    for (final bridge in world.bridges) {
-      final center = Offset(bridge.position.x, bridge.position.y);
-      if (!visible.inflate(bridge.length).contains(center)) continue;
-      final cosine = math.cos(bridge.angle).abs();
-      final sine = math.sin(bridge.angle).abs();
-      _overlayLayout.addIconAtWorld(
-        center,
-        Size(
-          (cosine * bridge.length + sine * bridge.width + 16) * zoom,
-          (sine * bridge.length + cosine * bridge.width + 16) * zoom,
-        ),
-      );
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate(bridge.angle);
-      final deck = Rect.fromCenter(
-        center: Offset.zero,
-        width: bridge.length,
-        height: bridge.width,
-      );
-      final shadow = RRect.fromRectAndRadius(
-        deck.inflate(8).shift(const Offset(0, 5)),
-        const Radius.circular(3),
-      );
-      final deckShape = RRect.fromRectAndRadius(
-        deck,
-        const Radius.circular(2.5),
-      );
-      canvas.drawRRect(shadow, Paint()..color = const Color(0x5530271C));
-      canvas.drawRRect(deckShape, Paint()..color = const Color(0xFF655846));
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(deck.deflate(3), const Radius.circular(1)),
-        Paint()..color = const Color(0xFFB49D70),
-      );
-      final plankPaint = Paint()
-        ..color = const Color(0xFF806B4E)
-        ..strokeWidth = math.max(1.2, 1.5 / zoom);
-      final plankSpacing = math.max(9.0, 11 / zoom);
-      for (
-        var x = deck.left + plankSpacing;
-        x < deck.right;
-        x += plankSpacing
-      ) {
-        canvas.drawLine(
-          Offset(x, deck.top + 3),
-          Offset(x, deck.bottom - 3),
-          plankPaint,
-        );
-      }
-      for (final y in [deck.top + 2.3, deck.bottom - 2.3]) {
-        canvas.drawLine(
-          Offset(deck.left + 4, y),
-          Offset(deck.right - 4, y),
-          Paint()
-            ..color = const Color(0xFF514532)
-            ..strokeWidth = math.max(2.0, 3 / zoom)
-            ..strokeCap = StrokeCap.round,
-        );
-      }
-      canvas.restore();
-    }
-  }
-
-  void _drawSettlements(Canvas canvas, Rect visible) {
-    for (final settlement in world.settlements) {
-      final center = Offset(settlement.position.x, settlement.position.y);
-      final size = switch (settlement.kind) {
-        WorldMapSettlementKind.city => (126.0, 94.0),
-        WorldMapSettlementKind.town => (92.0, 70.0),
-        WorldMapSettlementKind.village => (70.0, 54.0),
-        WorldMapSettlementKind.hamlet => (50.0, 40.0),
-      };
-      if (!visible.inflate(size.$1 / zoom).contains(center)) continue;
-
-      _overlayLayout.addIconAtWorld(center, Size(size.$1 + 10, size.$2 + 10));
-
-      canvas.drawCircle(
-        center,
-        size.$1 * 0.4,
-        Paint()
-          ..color = const Color(0x1F473A28)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 15 / zoom,
-      );
-      if (landmarkAtlas.isReady) {
-        landmarkAtlas.drawAt(
-          canvas: canvas,
-          index: 0,
-          worldCenter: center,
-          zoom: zoom,
-          screenWidth: size.$1,
-          screenHeight: size.$2,
-        );
-      } else {
-        final radius = size.$1 / (2 * zoom);
-        canvas.drawCircle(
-          center,
-          radius,
-          Paint()..color = const Color(0x668C7350),
-        );
-        canvas.drawCircle(
-          center,
-          radius * 0.74,
-          Paint()..color = const Color(0xFFFFD58A),
-        );
-      }
-
-      if (settlement.kind == WorldMapSettlementKind.city && zoom >= 0.42) {
-        final streetPaint = Paint()
-          ..color = const Color(0x779A8460)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1.2, 1.8 / zoom)
-          ..strokeCap = StrokeCap.round;
-        for (final offset in const [
-          Offset(-26, -8),
-          Offset(-10, 17),
-          Offset(12, -20),
-          Offset(30, 5),
-        ]) {
-          canvas.drawLine(
-            center + offset / zoom,
-            center + Offset(offset.dx + 14, offset.dy - 4) / zoom,
-            streetPaint,
-          );
-        }
-      }
-
-      final showLabel =
-          settlement.kind == WorldMapSettlementKind.city ||
-          settlement.kind == WorldMapSettlementKind.town ||
-          zoom >= 0.68;
-      if (showLabel) {
-        final kindLabel = switch (settlement.kind) {
-          WorldMapSettlementKind.city => 'ŞEHİR',
-          WorldMapSettlementKind.town => 'KASABA',
-          WorldMapSettlementKind.village => 'KÖY',
-          WorldMapSettlementKind.hamlet => 'MEZRA',
-        };
-        _drawScreenMapLabel(
-          '${settlement.name.toUpperCase()}\n$kindLabel · ${_formatPopulation(settlement.population)}',
-          center +
-              Offset(
-                0,
-                (settlement.kind == WorldMapSettlementKind.city ? -1 : 1) *
-                    (size.$2 / 2 + 15) /
-                    zoom,
-              ),
-          priority: switch (settlement.kind) {
-            WorldMapSettlementKind.city => 105,
-            WorldMapSettlementKind.town => 90,
-            WorldMapSettlementKind.village => 75,
-            WorldMapSettlementKind.hamlet => 65,
-          },
-        );
-      }
-    }
-  }
-
-  String _formatPopulation(int population) => population
-      .toString()
-      .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
-
-  void _drawPonds(Canvas canvas, WorldMapChunk chunk, Rect visible) {
-    for (final pond in chunk.ponds) {
-      final rect = Rect.fromCenter(
-        center: Offset(pond.center.x, pond.center.y),
-        width: pond.width,
-        height: pond.height,
-      );
-      if (!rect.inflate(30).overlaps(visible)) continue;
-      canvas.drawOval(
-        rect.inflate(20).shift(const Offset(0, 7)),
-        Paint()..color = const Color(0x3E263728),
-      );
-      canvas.drawOval(
-        rect.inflate(14),
-        Paint()..color = const Color(0xFF84916A),
-      );
-      canvas.drawOval(
-        rect.inflate(7),
-        Paint()..color = const Color(0xFFC2A977),
-      );
-      canvas.drawOval(
-        rect,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            rect.topLeft,
-            rect.bottomRight,
-            const [Color(0xFF76B9B1), Color(0xFF3E8791), Color(0xFF285E6B)],
-            const [0, 0.57, 1],
-          ),
-      );
-      canvas.drawOval(
-        rect.deflate(math.min(rect.width, rect.height) * 0.12),
-        Paint()
-          ..color = const Color(0x6070CBC1)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1.4, 2 / zoom),
-      );
-      canvas.drawArc(
-        rect.deflate(math.min(rect.width, rect.height) * 0.25),
-        math.pi * 1.10,
-        math.pi * 0.48,
-        false,
-        Paint()
-          ..color = const Color(0xA6DDF0D3)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(1.2, 1.8 / zoom)
-          ..strokeCap = StrokeCap.round,
-      );
-      if (zoom >= 0.58) {
-        for (var ripple = 0; ripple < 4; ripple++) {
-          final y = rect.top + rect.height * (0.28 + ripple * 0.13);
-          canvas.drawLine(
-            Offset(rect.left + rect.width * 0.18, y),
-            Offset(rect.left + rect.width * 0.18 + rect.width * 0.15, y - 3),
-            Paint()
-              ..color = const Color(0x599BE1D4)
-              ..strokeWidth = math.max(1, 1.2 / zoom)
-              ..strokeCap = StrokeCap.round,
-          );
-        }
-      }
-    }
-  }
-
-  void _drawTrees(Canvas canvas, WorldMapChunk chunk) {
-    final skip = zoom < 0.27
-        ? 3
-        : zoom < 0.42
-        ? 2
-        : 1;
-    for (var index = 0; index < chunk.trees.length; index += skip) {
-      final tree = chunk.trees[index];
-      final center = Offset(tree.center.x, tree.center.y);
-      final radius = tree.radius;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: center + Offset(radius * 0.18, radius * 0.48),
-          width: radius * 2.05,
-          height: radius * 1.18,
-        ),
-        Paint()..color = const Color(0x30223221),
-      );
-      if (zoom < 0.32) {
-        canvas.drawCircle(
-          center,
-          radius * 0.72,
-          Paint()..color = Color(tree.tint),
-        );
-      } else {
-        canvas.drawCircle(
-          center + Offset(radius * 0.18, radius * 0.2),
-          radius * 0.82,
-          Paint()..color = Color(tree.tint),
-        );
-        canvas.drawCircle(
-          center - Offset(radius * 0.24, radius * 0.04),
-          radius * 0.61,
-          Paint()..color = Color(tree.tint),
-        );
-        canvas.drawCircle(
-          center - Offset(radius * 0.19, radius * 0.3),
-          radius * 0.38,
-          Paint()..color = const Color(0xFF76A65E).withValues(alpha: 0.56),
-        );
-      }
-    }
-  }
-
-  FarmFieldTextureState _fieldStateFor(CropPlotState? plot) {
-    if (plot == null) return FarmFieldTextureState.plowed;
-    final job = plot.activeJob;
-    if (job != null) {
-      return switch (job.operation) {
-        FarmOperation.prepare => FarmFieldTextureState.plowed,
-        FarmOperation.fertilize => FarmFieldTextureState.fertilized,
-        FarmOperation.sow => FarmFieldTextureState.growing,
-        FarmOperation.harvest => FarmFieldTextureState.harvestReady,
-        FarmOperation.bale => FarmFieldTextureState.harvested,
-      };
-    }
-    if (plot.hasActiveCrop) {
-      final snapshot = session.cropSnapshotForPlot(plot.id, DateTime.now());
-      return snapshot?.isHarvestable == true
-          ? FarmFieldTextureState.harvestReady
-          : FarmFieldTextureState.growing;
-    }
-    if (plot.hasHarvestedActiveCrop) return FarmFieldTextureState.harvested;
-    if (plot.hasOrganicCompostBonus || plot.soilConditionPoints > 80) {
-      return FarmFieldTextureState.fertilized;
-    }
-    return FarmFieldTextureState.plowed;
-  }
-
-  ({FarmFieldTextureState state, String? cropId}) _ambientFieldAppearance(
-    WorldMapParcel parcel,
-  ) {
-    final seed = _stableFieldHash('${parcel.id}:${parcel.cropType.name}');
-    final cropId = parcel.cropType == WorldCropType.grain
-        ? (seed.isEven
-              ? OpeningCropCatalog.wheatId
-              : OpeningCropCatalog.maizeId)
-        : null;
-    final roll = seed % 100;
-
-    if (parcel.cropType == WorldCropType.pasture) {
-      return (
-        state: roll < 16
-            ? FarmFieldTextureState.fertilized
-            : roll < 86
-            ? FarmFieldTextureState.growing
-            : FarmFieldTextureState.harvested,
-        cropId: null,
-      );
-    }
-
-    final state = switch (roll) {
-      < 20 => FarmFieldTextureState.plowed,
-      < 34 => FarmFieldTextureState.fertilized,
-      < 63 => FarmFieldTextureState.growing,
-      < 86 =>
-        cropId == null
-            ? (seed.isEven
-                  ? FarmFieldTextureState.fertilized
-                  : FarmFieldTextureState.growing)
-            : FarmFieldTextureState.harvestReady,
-      _ => FarmFieldTextureState.harvested,
-    };
-    return (state: state, cropId: cropId);
-  }
-
-  int _stableFieldHash(String value) {
-    var hash = 0x811c9dc5;
-    for (final unit in value.codeUnits) {
-      hash = ((hash ^ unit) * 0x01000193) & 0x7fffffff;
-    }
-    return hash;
-  }
-
-  String? _fieldCropId(CropPlotState? plot) {
-    final job = plot?.activeJob;
-    return plot?.activeCropId ?? job?.cropId;
-  }
-
-  Color? _soilTintAt(Offset point) {
-    final region = world.regionAt(WorldMapPoint(point.dx, point.dy));
-    return region == null ? null : Color(region.soilColor);
-  }
-
-  void _drawFieldSurface(
-    Canvas canvas,
-    Path path,
-    Rect rect, {
-    required Color baseColor,
-    required bool owned,
-    required FarmFieldTextureState state,
-    required String? cropId,
-    required Color? soilTint,
-  }) {
-    canvas.drawPath(path, Paint()..color = baseColor);
-    var textureDrawn = false;
-    if (zoom >= 0.43) {
-      textureDrawn = fieldTextureAtlas.drawField(
-        canvas: canvas,
-        clipPath: path,
-        bounds: rect,
-        state: state,
-        cropId: cropId,
-        opacity: owned ? 1 : 0.92,
-      );
-    }
-    if (soilTint != null && textureDrawn) {
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = soilTint.withValues(alpha: 0.14)
-          ..blendMode = BlendMode.softLight,
-      );
-    }
-    if (!textureDrawn && zoom >= 0.56) {
-      canvas.save();
-      canvas.clipPath(path);
-      final furrowPaint = Paint()
-        ..color = owned ? const Color(0x553A623D) : const Color(0x5B684F31)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 / zoom
-        ..strokeCap = StrokeCap.round;
-      final rowCount = (rect.height / 34).clamp(4, 18).round();
-      for (var row = -rowCount ~/ 2; row <= rowCount ~/ 2; row++) {
-        final y = rect.center.dy + row * rect.height / rowCount;
-        canvas.drawLine(
-          Offset(rect.left - 8, y + 7),
-          Offset(rect.right + 8, y - 9),
-          furrowPaint,
-        );
-      }
-      canvas.restore();
-    }
-  }
-
-  void _drawParcel(Canvas canvas, WorldMapParcel parcel) {
-    if (parcel.isHome) return;
-    final owned = session.ownsWorldParcel(parcel.id);
-    final farmPlot = session.plotForWorldParcel(parcel.id);
-    if (session.buildingOnParcel(parcel.id) != null) {
-      if (zoom < 0.31 && owned) {
-        _drawOwnedParcelMarker(
-          canvas,
-          Offset(parcel.center.x, parcel.center.y),
-          selected: parcel.id == selectedParcelId,
-        );
-      }
-      return;
-    }
-    final center = Offset(parcel.center.x, parcel.center.y);
-    final isSelected =
-        parcel.id == selectedParcelId ||
-        farmPlot?.id == selectedFarmPlotId ||
-        farmPlot?.id == salesRouteStartPlotId;
-    final isRouteStart = parcel.id == routeStartParcelId;
-    if (zoom < 0.31) {
-      if (owned) {
-        _drawOwnedParcelMarker(
-          canvas,
-          center,
-          selected:
-              isSelected ||
-              isRouteStart ||
-              farmPlot?.id == salesRouteStartPlotId,
-        );
-      }
-      return;
-    }
-    final rect = Rect.fromCenter(
-      center: center,
-      width: parcel.width,
-      height: parcel.height,
-    );
-    _overlayLayout.addWorldPolygon(
-      parcel.id,
-      parcel.worldVertices
-          .map((point) => Offset(point.x, point.y))
-          .toList(growable: false),
-    );
-    final hasGrowingCrop = farmPlot?.hasActiveCrop == true;
-    final usesSavedFieldState = owned && farmPlot?.isOwned == true;
-    final ambientAppearance = usesSavedFieldState
-        ? null
-        : _ambientFieldAppearance(parcel);
-    final cropColor = showFertility
-        ? Color.lerp(
-            const Color(0xFFBD5D47),
-            const Color(0xFF8EBE58),
-            parcel.fertility / 100,
-          )!
-        : hasGrowingCrop
-        ? _cropFamilyColor(
-            OpeningCropCatalog.familyFor(farmPlot!.activeCropId!) ??
-                farmPlot.preferredCropFamily,
-          )
-        : _mapCropColor(parcel.cropType);
-    final path = _parcelPath(parcel);
-    canvas.drawPath(
-      path.shift(const Offset(0, 5)),
-      Paint()..color = const Color(0x44253823),
-    );
-    final fill = owned
-        ? hasGrowingCrop
-              ? Color.lerp(cropColor, const Color(0xFF70A256), 0.24)!
-              : const Color(0xFF70A256)
-        : Color.lerp(cropColor, const Color(0xFFF2E5C2), 0.38)!;
-    _drawFieldSurface(
-      canvas,
-      path,
-      rect,
-      baseColor: fill,
-      owned: owned,
-      state: usesSavedFieldState
-          ? _fieldStateFor(farmPlot)
-          : ambientAppearance!.state,
-      cropId: usesSavedFieldState
-          ? _fieldCropId(farmPlot)
-          : ambientAppearance!.cropId,
-      soilTint: _soilTintAt(center),
-    );
-
-    final borderColor = isSelected
-        ? const Color(0xFFFFC84F)
-        : isRouteStart
-        ? const Color(0xFF76E19B)
-        : owned
-        ? const Color(0xFFB8E48F)
-        : const Color(0xFFFFF0CE);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = borderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected
-            ? 6
-            : owned
-            ? 4
-            : 3,
-    );
-
-    if (zoom >= 1.05) {
-      final fencePaint = Paint()
-        ..color = owned ? const Color(0xFFC8AE74) : const Color(0x99F9E7C3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6;
-      final vertices = parcel.worldVertices
-          .map((point) => Offset(point.x, point.y))
-          .toList(growable: false);
-      var gateIndex = 0;
-      var lowestEdgeY = double.negativeInfinity;
-      for (var index = 0; index < vertices.length; index++) {
-        final start = vertices[index];
-        final end = vertices[(index + 1) % vertices.length];
-        canvas.drawLine(start, end, fencePaint);
-        final edgeY = (start.dy + end.dy) / 2;
-        if (edgeY > lowestEdgeY) {
-          lowestEdgeY = edgeY;
-          gateIndex = index;
-        }
-      }
-      final gateStart = vertices[gateIndex];
-      final gateEnd = vertices[(gateIndex + 1) % vertices.length];
-      final gateVector = gateEnd - gateStart;
-      final gateCenter = Offset.lerp(gateStart, gateEnd, 0.5)!;
-      canvas.drawLine(
-        gateCenter - gateVector * 0.11,
-        gateCenter + gateVector * 0.11,
-        Paint()
-          ..color = const Color(0xFF765A34)
-          ..strokeWidth = 5,
-      );
-    }
-
-    if (farmPlot != null && zoom >= 0.56) {
-      _drawMapLabel(
-        farmPlot.use == CropPlotUse.pasture
-            ? 'ÇAYIR'
-            : farmPlot.activeCropId == null
-            ? 'EKİM BEKLİYOR'
-            : _cropName(farmPlot.activeCropId!).toUpperCase(),
-        center,
-        8,
-        priority: 15,
-        allowParcelId: parcel.id,
-      );
-    }
-
-    if (zoom >= 0.8 && !parcel.isHome) {
-      _drawMapLabel(
-        _mapCropLabel(parcel.cropType),
-        Offset(center.dx, rect.bottom + 12),
-        13,
-        priority: 12,
-      );
-    }
-    if (isSelected && !parcel.isHome && zoom >= 0.5) {
-      _drawMapLabel(
-        '${parcel.price} ÇK · ${parcel.fertility} verim',
-        Offset(center.dx, rect.top - 12),
-        14,
-        priority: 80,
-      );
-    }
-  }
-
-  void _drawLocalFarmPlots(Canvas canvas) {
-    const shapeVariants = <List<Offset>>[
-      [
-        Offset(0.08, 0),
-        Offset(0.76, 0.03),
-        Offset(1, 0.27),
-        Offset(0.88, 0.82),
-        Offset(0.6, 1),
-        Offset(0.05, 0.84),
-        Offset(0, 0.35),
-      ],
-      [
-        Offset(0.16, 0),
-        Offset(0.77, 0.08),
-        Offset(1, 0.42),
-        Offset(0.82, 0.93),
-        Offset(0.32, 1),
-        Offset(0, 0.71),
-        Offset(0.09, 0.24),
-      ],
-      [
-        Offset(0, 0.14),
-        Offset(0.3, 0),
-        Offset(0.87, 0.08),
-        Offset(1, 0.45),
-        Offset(0.73, 0.57),
-        Offset(0.81, 1),
-        Offset(0.23, 0.9),
-        Offset(0, 0.62),
-      ],
-      [
-        Offset(0, 0.02),
-        Offset(0.8, 0),
-        Offset(1, 0.22),
-        Offset(0.92, 0.58),
-        Offset(0.75, 1),
-        Offset(0.15, 0.91),
-        Offset(0.02, 0.5),
-      ],
-      [
-        Offset(0.04, 0.29),
-        Offset(0.38, 0.04),
-        Offset(0.96, 0.16),
-        Offset(1, 0.7),
-        Offset(0.63, 0.91),
-        Offset(0.15, 1),
-        Offset(0, 0.69),
-      ],
-      [
-        Offset(0, 0.1),
-        Offset(0.51, 0),
-        Offset(0.98, 0.2),
-        Offset(0.8, 0.53),
-        Offset(0.92, 1),
-        Offset(0.37, 0.82),
-        Offset(0.05, 0.59),
-      ],
-      [
-        Offset(0.2, 0),
-        Offset(0.93, 0.05),
-        Offset(1, 0.39),
-        Offset(0.75, 0.84),
-        Offset(0.58, 1),
-        Offset(0.06, 0.73),
-        Offset(0, 0.21),
-      ],
-      [
-        Offset(0, 0.38),
-        Offset(0.12, 0.08),
-        Offset(0.56, 0),
-        Offset(1, 0.18),
-        Offset(0.89, 0.57),
-        Offset(0.74, 0.96),
-        Offset(0.26, 1),
-        Offset(0.05, 0.74),
-      ],
-    ];
-
-    for (final plot in session.plots) {
-      if (plot.id == 0 && session.starterPlotId != 0) continue;
-      if (plot.mapParcelId?.startsWith('home-') != true) continue;
-      if (plot.mapParcelId != null &&
-          session.buildingOnParcel(plot.mapParcelId!) != null) {
-        continue;
-      }
-      final center = Offset(plot.mapX, plot.mapY);
-      if (zoom < 0.30) {
-        if (plot.isOwned) {
-          _drawOwnedParcelMarker(
-            canvas,
-            center,
-            selected:
-                plot.id == selectedFarmPlotId ||
-                plot.id == salesRouteStartPlotId,
-          );
-        }
-        continue;
-      }
-      final rect = Rect.fromCenter(
-        center: center,
-        width: plot.mapWidth,
-        height: plot.mapHeight,
-      );
-      final shapeRandom = math.Random(plot.id * 7919 + 104729);
-      final vertices = shapeVariants[plot.id % shapeVariants.length];
-      Offset mapVertex(Offset vertex) {
-        final jitterX = (shapeRandom.nextDouble() - 0.5) * 0.04;
-        final jitterY = (shapeRandom.nextDouble() - 0.5) * 0.04;
-        final x = (vertex.dx + jitterX).clamp(0.0, 1.0).toDouble();
-        final y = (vertex.dy + jitterY).clamp(0.0, 1.0).toDouble();
-        return Offset(rect.left + rect.width * x, rect.top + rect.height * y);
-      }
-
-      final worldVertices = vertices.map(mapVertex).toList(growable: false);
-      final firstVertex = worldVertices.first;
-      final path = Path()..moveTo(firstVertex.dx, firstVertex.dy);
-      for (final point in worldVertices.skip(1)) {
-        path.lineTo(point.dx, point.dy);
-      }
-      path.close();
-      _overlayLayout.addWorldPolygon('local-plot:${plot.id}', worldVertices);
-      final selected =
-          plot.id == selectedFarmPlotId || plot.id == salesRouteStartPlotId;
-      final baseColor = plot.use == CropPlotUse.pasture
-          ? const Color(0xFF6F9E55)
-          : !plot.hasActiveCrop
-          ? _cropFamilyColor(plot.preferredCropFamily)
-          : _cropFamilyColor(
-              OpeningCropCatalog.familyFor(plot.activeCropId!) ??
-                  plot.preferredCropFamily,
-            );
-      final fill = plot.isOwned
-          ? baseColor
-          : Color.lerp(baseColor, const Color(0xFFF2E5C2), 0.48)!;
-      canvas.drawPath(
-        path.shift(const Offset(0, 5)),
-        Paint()..color = const Color(0x44253823),
-      );
-      if (plot.use == CropPlotUse.pasture) {
-        canvas.drawPath(path, Paint()..color = fill);
-        if (zoom >= 0.48) {
-          canvas.save();
-          canvas.clipPath(path);
-          final grassRandom = math.Random(plot.id * 32771 + 811);
-          final grassPaint = Paint()
-            ..color = const Color(0x667FAD59)
-            ..strokeWidth = 1.2 / zoom
-            ..strokeCap = StrokeCap.round;
-          for (var tuft = 0; tuft < 34; tuft++) {
-            final x = rect.left + grassRandom.nextDouble() * rect.width;
-            final y = rect.top + grassRandom.nextDouble() * rect.height;
-            if (!path.contains(Offset(x, y))) continue;
-            final lean = (grassRandom.nextDouble() - 0.5) * 3;
-            canvas.drawLine(
-              Offset(x, y),
-              Offset(x + lean, y - 3 - grassRandom.nextDouble() * 4),
-              grassPaint,
-            );
-          }
-          canvas.restore();
-        }
-      } else {
-        _drawFieldSurface(
-          canvas,
-          path,
-          rect,
-          baseColor: fill,
-          owned: plot.isOwned,
-          state: _fieldStateFor(plot),
-          cropId: _fieldCropId(plot),
-          soilTint: _soilTintAt(center),
-        );
-      }
-
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = selected
-              ? const Color(0xFFFFC84F)
-              : plot.isOwned
-              ? const Color(0xFFB8E48F)
-              : const Color(0xFFFFF0CE)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = selected ? 5 : 3,
-      );
-
-      if (zoom >= 0.48) {
-        if (plot.hasActiveCrop || plot.use == CropPlotUse.pasture) {
-          _drawMapLabel(
-            plot.use == CropPlotUse.pasture
-                ? 'ÇAYIR'
-                : _cropName(plot.activeCropId!).toUpperCase(),
-            center + Offset(0, rect.height * 0.27),
-            6,
-            priority: 15,
-            allowParcelId: 'local-plot:${plot.id}',
-          );
-        }
-      }
-    }
-  }
-
-  Path _parcelPath(WorldMapParcel parcel) {
-    final vertices = parcel.worldVertices;
-    final path = Path()..moveTo(vertices.first.x, vertices.first.y);
-    for (final vertex in vertices.skip(1)) {
-      path.lineTo(vertex.x, vertex.y);
-    }
-    return path..close();
-  }
-
-  void _drawLogistics(Canvas canvas) {
-    for (final link in session.state.worldLogisticsLinks) {
-      final start = Offset(link.from.x, link.from.y);
-      final end = Offset(link.to.x, link.to.y);
-      final delta = end - start;
-      final perpendicular = Offset(-delta.dy, delta.dx);
-      final normal = perpendicular.distance == 0
-          ? Offset.zero
-          : perpendicular / perpendicular.distance;
-      final stableBendSign =
-          link.id.codeUnits.fold<int>(0, (sum, unit) => sum + unit).isEven
-          ? 1
-          : -1;
-      final bend =
-          math.min(delta.distance * 0.12, 380).toDouble() * stableBendSign;
-      final midpoint = (start + end) / 2 + normal * bend;
-      final path = Path()
-        ..moveTo(start.dx, start.dy)
-        ..quadraticBezierTo(midpoint.dx, midpoint.dy, end.dx, end.dy);
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xFF5B4127)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 17
-          ..strokeCap = StrokeCap.round,
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = const Color(0xFFFFD875)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 10
-          ..strokeCap = StrokeCap.round,
-      );
-      _drawDashPath(
-        canvas,
-        path,
-        Paint()
-          ..color = const Color(0xFF84552D)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.1,
-        dash: 13,
-        gap: 11,
-      );
-      _drawTruckMarker(canvas, path);
-    }
-  }
-
-  void _drawTruckMarker(Canvas canvas, Path path) {
-    final metrics = path.computeMetrics().toList();
-    if (metrics.isEmpty) return;
-    final tangent = metrics.first.getTangentForOffset(
-      metrics.first.length * 0.53,
-    );
-    if (tangent == null) return;
-    final center = tangent.position;
-    _overlayLayout.addIconAtWorld(center, Size(34 * zoom, 20 * zoom));
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(math.atan2(tangent.vector.dy, tangent.vector.dx));
-    final marker = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset.zero, width: 34, height: 20),
-      const Radius.circular(6),
-    );
-    canvas.drawRRect(
-      marker.shift(const Offset(0, 3)),
-      Paint()..color = const Color(0x55332616),
-    );
-    canvas.drawRRect(marker, Paint()..color = const Color(0xFF28583D));
-    canvas.drawRRect(
-      marker,
-      Paint()
-        ..color = const Color(0xFFFFF4D9)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-    final wheelPaint = Paint()..color = const Color(0xFF473B2A);
-    for (final x in const [-9.0, 9.0]) {
-      canvas.drawCircle(Offset(x, -9), 3.1, wheelPaint);
-      canvas.drawCircle(Offset(x, 9), 3.1, wheelPaint);
-    }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: const Offset(9, 0), width: 7, height: 13),
-        const Radius.circular(2),
-      ),
-      Paint()..color = const Color(0xFFFFD875),
-    );
-    canvas.restore();
-  }
-
-  void _drawPointOfInterest(Canvas canvas, WorldMapPointOfInterest poi) {
-    final center = Offset(poi.position.x, poi.position.y);
-    final colors = switch (poi.type) {
-      WorldPointOfInterestType.water => (
-        const Color(0xFF67D2D4),
-        Icons.water_drop_rounded,
-      ),
-      WorldPointOfInterestType.village => (
-        const Color(0xFFFFD37A),
-        Icons.holiday_village_rounded,
-      ),
-      WorldPointOfInterestType.mill => (
-        const Color(0xFFF3E7C1),
-        Icons.factory_rounded,
-      ),
-      WorldPointOfInterestType.timberYard => (
-        const Color(0xFFA8CF78),
-        Icons.forest_rounded,
-      ),
-    };
-    final atlasIndex = switch (poi.type) {
-      WorldPointOfInterestType.village => 0,
-      WorldPointOfInterestType.mill => 1,
-      _ => null,
-    };
-    _overlayLayout.addIconAtWorld(
-      center,
-      atlasIndex == null
-          ? Size(42 * zoom, 42 * zoom)
-          : Size(
-              poi.type == WorldPointOfInterestType.village ? 82 : 84,
-              poi.type == WorldPointOfInterestType.village ? 70 : 70,
-            ),
-    );
-    if (atlasIndex != null && landmarkAtlas.isReady) {
-      landmarkAtlas.drawAt(
-        canvas: canvas,
-        index: atlasIndex,
-        worldCenter: center,
-        zoom: zoom,
-        screenWidth: poi.type == WorldPointOfInterestType.village ? 74 : 76,
-        screenHeight: poi.type == WorldPointOfInterestType.village ? 62 : 60,
-      );
-    } else {
-      canvas.drawCircle(
-        center + const Offset(0, 3),
-        20,
-        Paint()..color = const Color(0x55233924),
-      );
-      canvas.drawCircle(center, 18, Paint()..color = const Color(0xFF214D36));
-      canvas.drawCircle(
-        center,
-        18,
-        Paint()
-          ..color = colors.$1
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.7,
-      );
-      _drawMapIcon(canvas, colors.$2, center, 20, colors.$1);
-    }
-    if (zoom >= 0.38) {
-      _drawScreenMapLabel(
-        poi.name.toUpperCase(),
-        center + Offset(0, atlasIndex == null ? 30 : 36),
-        priority: 60,
-      );
-    }
-  }
-
-  void _drawMapIcon(
-    Canvas canvas,
-    IconData icon,
-    Offset center,
-    double size,
-    Color color,
-  ) {
-    final builder =
-        ui.ParagraphBuilder(
-            ui.ParagraphStyle(fontSize: size, textDirection: TextDirection.ltr),
-          )
-          ..pushStyle(ui.TextStyle(color: color, fontFamily: 'MaterialIcons'))
-          ..addText(String.fromCharCode(icon.codePoint));
-    final paragraph = builder.build()
-      ..layout(ui.ParagraphConstraints(width: size * 1.5));
-    canvas.drawParagraph(
-      paragraph,
-      center - Offset(paragraph.width / 2, paragraph.height / 2),
-    );
-  }
-
-  void _drawMeasurements(Canvas canvas) {
-    final start = measureStart;
-    final end = measureEnd;
-    if (start == null) return;
-    final first = Offset(start.x, start.y);
-    if (end == null) {
-      canvas.drawCircle(first, 12, Paint()..color = const Color(0xFFFFC84F));
-      canvas.drawCircle(first, 7, Paint()..color = const Color(0xFF214D36));
-      return;
-    }
-    final second = Offset(end.x, end.y);
-    final path = Path()
-      ..moveTo(first.dx, first.dy)
-      ..lineTo(second.dx, second.dy);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = const Color(0xCC173B2A)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 8,
-    );
-    _drawDashPath(
-      canvas,
-      path,
-      Paint()
-        ..color = const Color(0xFFFFD25D)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5,
-      dash: 18,
-      gap: 13,
-    );
-    for (final point in [first, second]) {
-      canvas.drawCircle(point, 11, Paint()..color = const Color(0xFFFFC84F));
-      canvas.drawCircle(point, 5, Paint()..color = const Color(0xFF214D36));
-    }
-  }
-
-  void _drawWorldBoundaries(Canvas canvas) {
-    final bounds = ProceduralFarmWorld.worldBounds;
-
-    // Sınırın dışını kaplayan yarı saydam koyu sis ve keşfedilmemiş vadi alanı (EvenOdd fill)
-    final fogPaint = Paint()
-      ..color = const Color(0xEB112017)
-      ..style = PaintingStyle.fill;
-
-    const outerMargin = 6000.0;
-    final outerRect = bounds.inflate(outerMargin);
-    final fogPath = Path()
-      ..addRect(outerRect)
-      ..addRect(bounds)
-      ..fillType = PathFillType.evenOdd;
-    canvas.drawPath(fogPath, fogPaint);
-
-    // Çiftlik dünya sınırı parıltısı
-    final borderGlow = Paint()
-      ..color = const Color(0x55FFC84F)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14;
-    canvas.drawRect(bounds, borderGlow);
-
-    // Ana sınır ahşap çit hattı
-    final borderFence = Paint()
-      ..color = const Color(0xFF6B4526)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 8;
-    canvas.drawRect(bounds, borderFence);
-
-    // İç sınır çizgisi
-    final dashPaint = Paint()
-      ..color = const Color(0xFFFFE2A3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    canvas.drawRect(bounds.inflate(-5), dashPaint);
-
-    // Dört köşe sınır taşları ve işaret sütunları
-    final cornerStonePaint = Paint()..color = const Color(0xFF382C22);
-    final cornerPillarPaint = Paint()..color = const Color(0xFFFFC84F);
-    final corners = [
-      bounds.topLeft,
-      bounds.topRight,
-      bounds.bottomLeft,
-      bounds.bottomRight,
-    ];
-    for (final corner in corners) {
-      canvas.drawCircle(corner, 32, cornerStonePaint);
-      canvas.drawCircle(corner, 20, cornerPillarPaint);
-      canvas.drawCircle(corner, 8, cornerStonePaint);
-    }
-  }
-
-  void _drawMapLabel(
-    String text,
-    Offset center,
-    double width, {
-    int priority = 20,
-    String? allowParcelId,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: const Color(0xFFFFF4D9),
-          fontSize: width,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 0.2,
-          shadows: const [
-            Shadow(
-              color: Color(0xFF1B3424),
-              blurRadius: 5,
-              offset: Offset(0, 1),
-            ),
-            Shadow(color: Color(0xFF1B3424), blurRadius: 2),
-          ],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout(maxWidth: 230);
-    _pendingLabels.add(
-      _PendingMapLabel(
-        painter: painter,
-        center: center,
-        screenBoxSize: Size(
-          painter.width * zoom + 8,
-          painter.height * zoom + 6,
-        ),
-        screenCard: false,
-        priority: priority,
-        order: _nextLabelOrder++,
-        allowParcelId: allowParcelId,
-      ),
-    );
-  }
-
-  void _drawScreenMapLabel(String text, Offset center, {int priority = 40}) {
-    final lines = text.split('\n');
-    final painter = TextPainter(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: lines.first,
-            style: const TextStyle(
-              color: Color(0xFF244331),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.48,
-              height: 1.1,
-            ),
-          ),
-          if (lines.length > 1)
-            TextSpan(
-              text: '\n${lines[1]}',
-              style: const TextStyle(
-                color: Color(0xFF6B6948),
-                fontSize: 8.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
-                height: 1.2,
-              ),
-            ),
-        ],
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 2,
-    )..layout(maxWidth: 220);
-    _pendingLabels.add(
-      _PendingMapLabel(
-        painter: painter,
-        center: center,
-        screenBoxSize: Size(painter.width + 15, painter.height + 9),
-        screenCard: true,
-        priority: priority,
-        order: _nextLabelOrder++,
-      ),
-    );
-  }
-
-  void _drawPendingMapLabels(Canvas canvas) {
-    final labels = [..._pendingLabels]
-      ..sort((left, right) {
-        final byPriority = right.priority.compareTo(left.priority);
-        return byPriority != 0 ? byPriority : left.order.compareTo(right.order);
-      });
-    for (final label in labels) {
-      final preferred = _overlayLayout.worldToScreen(label.center);
-      final offsets = _labelPlacementOffsets(label.screenBoxSize);
-      for (final offset in offsets) {
-        final screenCenter = preferred + offset;
-        final rect = Rect.fromCenter(
-          center: screenCenter,
-          width: label.screenBoxSize.width,
-          height: label.screenBoxSize.height,
-        );
-        if (!_overlayLayout.canPlaceLabel(
-          rect,
-          allowParcelId: label.allowParcelId,
-        )) {
-          continue;
-        }
-        _overlayLayout.reserveLabel(rect);
-        final worldCenter = _overlayLayout.screenToWorld(screenCenter);
-        if (label.screenCard) {
-          _paintScreenMapLabel(canvas, label.painter, worldCenter);
-        } else {
-          label.painter.paint(
-            canvas,
-            worldCenter -
-                Offset(label.painter.width / 2, label.painter.height / 2),
-          );
-        }
-        break;
-      }
-    }
-  }
-
-  List<Offset> _labelPlacementOffsets(Size boxSize) {
-    final horizontal = boxSize.width / 2 + 7;
-    final vertical = boxSize.height / 2 + 7;
-    final offsets = <Offset>[Offset.zero];
-    for (var step = 1; step <= 3; step++) {
-      final dx = horizontal * step;
-      final dy = vertical * step;
-      offsets.addAll([
-        Offset(0, -dy),
-        Offset(0, dy),
-        Offset(dx, 0),
-        Offset(-dx, 0),
-        Offset(dx, -dy),
-        Offset(-dx, -dy),
-        Offset(dx, dy),
-        Offset(-dx, dy),
-      ]);
-    }
-    return offsets;
-  }
-
-  void _paintScreenMapLabel(Canvas canvas, TextPainter painter, Offset center) {
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: painter.width + 15,
-        height: painter.height + 9,
-      ),
-      const Radius.circular(7),
-    );
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.scale(1 / zoom);
-    canvas.drawRRect(
-      rect.shift(const Offset(0, 1.5)),
-      Paint()..color = const Color(0x4432281C),
-    );
-    canvas.drawRRect(rect, Paint()..color = const Color(0xF5F8F1D8));
-    canvas.drawRRect(
-      rect,
-      Paint()
-        ..color = const Color(0xAA837B55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.9,
-    );
-    painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
-    canvas.restore();
-  }
-
-  void _drawVignette(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [Colors.transparent, const Color(0x44112B1D)],
-          stops: const [0.62, 1],
-        ).createShader(rect),
-    );
-  }
-
-  static void _drawDashPath(
-    Canvas canvas,
-    Path path,
-    Paint paint, {
-    required double dash,
-    required double gap,
-  }) {
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final end = math.min(distance + dash, metric.length);
-        canvas.drawPath(metric.extractPath(distance, end), paint);
-        distance = end + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _WorldMapPainter oldDelegate) =>
-      world != oldDelegate.world ||
-      session != oldDelegate.session ||
-      fieldTextureAtlas != oldDelegate.fieldTextureAtlas ||
-      mapRevision != oldDelegate.mapRevision ||
-      cameraCenter != oldDelegate.cameraCenter ||
-      zoom != oldDelegate.zoom ||
-      selectedParcelId != oldDelegate.selectedParcelId ||
-      selectedRegionId != oldDelegate.selectedRegionId ||
-      selectedFarmPlotId != oldDelegate.selectedFarmPlotId ||
-      routeStartParcelId != oldDelegate.routeStartParcelId ||
-      salesRouteStartPlotId != oldDelegate.salesRouteStartPlotId ||
-      salesRouteMode != oldDelegate.salesRouteMode ||
-      salesRouteStart != oldDelegate.salesRouteStart ||
-      measureStart != oldDelegate.measureStart ||
-      measureEnd != oldDelegate.measureEnd ||
-      showParcels != oldDelegate.showParcels ||
-      showRoutes != oldDelegate.showRoutes ||
-      showInfrastructure != oldDelegate.showInfrastructure ||
-      showFertility != oldDelegate.showFertility;
-}
-
-class _PendingMapLabel {
-  const _PendingMapLabel({
-    required this.painter,
-    required this.center,
-    required this.screenBoxSize,
-    required this.screenCard,
-    required this.priority,
-    required this.order,
-    this.allowParcelId,
-  });
-
-  final TextPainter painter;
-  final Offset center;
-  final Size screenBoxSize;
-  final bool screenCard;
-  final int priority;
-  final int order;
-  final String? allowParcelId;
-}
-
-class _MapParcelScreenObstacle {
-  const _MapParcelScreenObstacle({
-    required this.id,
-    required this.vertices,
-    required this.bounds,
-  });
-
-  final String id;
-  final List<Offset> vertices;
-  final Rect bounds;
-}
-
-class _ScreenRoadObstacle {
-  const _ScreenRoadObstacle({
-    required this.start,
-    required this.end,
-    required this.radius,
-    required this.bounds,
-  });
-
-  final Offset start;
-  final Offset end;
-  final double radius;
-  final Rect bounds;
-}
-
-class _MapOverlayCollisionLayout {
-  _MapOverlayCollisionLayout({
-    required this.viewportSize,
-    required this.cameraCenter,
-    required this.zoom,
-  });
-
-  final Size viewportSize;
-  final Offset cameraCenter;
-  final double zoom;
-  final List<_MapParcelScreenObstacle> _parcels = [];
-  final List<_ScreenRoadObstacle> _roads = [];
-  final List<Rect> _icons = [];
-  final List<Rect> _labels = [];
-
-  Rect get _viewport => Offset.zero & viewportSize;
-
-  Offset worldToScreen(Offset point) => Offset(
-    viewportSize.width / 2 + (point.dx - cameraCenter.dx) * zoom,
-    viewportSize.height / 2 + (point.dy - cameraCenter.dy) * zoom,
-  );
-
-  Offset screenToWorld(Offset point) => Offset(
-    cameraCenter.dx + (point.dx - viewportSize.width / 2) / zoom,
-    cameraCenter.dy + (point.dy - viewportSize.height / 2) / zoom,
-  );
-
-  void addIconAtWorld(Offset center, Size size) {
-    _icons.add(
-      Rect.fromCenter(
-        center: worldToScreen(center),
-        width: size.width,
-        height: size.height,
-      ),
-    );
-  }
-
-  void addWorldPolygon(String id, List<Offset> worldVertices) {
-    if (worldVertices.length < 3) return;
-    final vertices = worldVertices.map(worldToScreen).toList(growable: false);
-    var left = double.infinity;
-    var top = double.infinity;
-    var right = double.negativeInfinity;
-    var bottom = double.negativeInfinity;
-    for (final point in vertices) {
-      left = math.min(left, point.dx).toDouble();
-      top = math.min(top, point.dy).toDouble();
-      right = math.max(right, point.dx).toDouble();
-      bottom = math.max(bottom, point.dy).toDouble();
-    }
-    _parcels.add(
-      _MapParcelScreenObstacle(
-        id: id,
-        vertices: vertices,
-        bounds: Rect.fromLTRB(left, top, right, bottom),
-      ),
-    );
-  }
-
-  void addWorldPolyline(List<Offset> worldPoints, double strokeWidth) {
-    if (worldPoints.length < 2) return;
-    final points = worldPoints.map(worldToScreen).toList(growable: false);
-    final radius = strokeWidth * zoom / 2;
-    for (var index = 0; index < points.length - 1; index++) {
-      final start = points[index];
-      final end = points[index + 1];
-      _roads.add(
-        _ScreenRoadObstacle(
-          start: start,
-          end: end,
-          radius: radius,
-          bounds: Rect.fromPoints(start, end).inflate(radius),
-        ),
-      );
-    }
-  }
-
-  bool canPlaceLabel(Rect rect, {String? allowParcelId}) {
-    if (!_viewport.inflate(-2).contains(rect.topLeft) ||
-        !_viewport.inflate(-2).contains(rect.bottomRight)) {
-      return false;
-    }
-    final padded = rect.inflate(3.5);
-    for (final icon in _icons) {
-      if (padded.overlaps(icon.inflate(2))) return false;
-    }
-    for (final label in _labels) {
-      if (padded.overlaps(label.inflate(3.5))) return false;
-    }
-    for (final parcel in _parcels) {
-      if (parcel.id == allowParcelId || !padded.overlaps(parcel.bounds)) {
-        continue;
-      }
-      if (_polygonIntersectsRect(parcel.vertices, padded)) return false;
-    }
-    for (final road in _roads) {
-      if (!padded.overlaps(road.bounds)) continue;
-      if (_segmentIntersectsRect(
-        road.start,
-        road.end,
-        padded.inflate(road.radius),
-      )) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void reserveLabel(Rect rect) => _labels.add(rect);
-
-  bool _polygonIntersectsRect(List<Offset> polygon, Rect rect) {
-    if (polygon.any(rect.contains)) return true;
-    final corners = [
-      rect.topLeft,
-      rect.topRight,
-      rect.bottomRight,
-      rect.bottomLeft,
-    ];
-    if (corners.any((point) => _pointInPolygon(point, polygon))) return true;
-
-    for (var index = 0; index < polygon.length; index++) {
-      final start = polygon[index];
-      final end = polygon[(index + 1) % polygon.length];
-      if (rect.contains(start) || rect.contains(end)) return true;
-      for (var edge = 0; edge < corners.length; edge++) {
-        if (_segmentsIntersect(
-          start,
-          end,
-          corners[edge],
-          corners[(edge + 1) % corners.length],
-        )) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  bool _pointInPolygon(Offset point, List<Offset> polygon) {
-    var inside = false;
-    for (
-      var index = 0, previous = polygon.length - 1;
-      index < polygon.length;
-      previous = index++
-    ) {
-      final currentPoint = polygon[index];
-      final previousPoint = polygon[previous];
-      final crosses =
-          (currentPoint.dy > point.dy) != (previousPoint.dy > point.dy);
-      if (!crosses) continue;
-      final xAtY =
-          (previousPoint.dx - currentPoint.dx) *
-              (point.dy - currentPoint.dy) /
-              (previousPoint.dy - currentPoint.dy) +
-          currentPoint.dx;
-      if (point.dx < xAtY) inside = !inside;
-    }
-    return inside;
-  }
-
-  bool _segmentsIntersect(Offset a, Offset b, Offset c, Offset d) {
-    final abC = _crossProduct(b - a, c - a);
-    final abD = _crossProduct(b - a, d - a);
-    final cdA = _crossProduct(d - c, a - c);
-    final cdB = _crossProduct(d - c, b - c);
-    if (abC.abs() < 0.001 && _onSegment(a, c, b)) return true;
-    if (abD.abs() < 0.001 && _onSegment(a, d, b)) return true;
-    if (cdA.abs() < 0.001 && _onSegment(c, a, d)) return true;
-    if (cdB.abs() < 0.001 && _onSegment(c, b, d)) return true;
-    final crossesAb = (abC > 0 && abD < 0) || (abC < 0 && abD > 0);
-    final crossesCd = (cdA > 0 && cdB < 0) || (cdA < 0 && cdB > 0);
-    return crossesAb && crossesCd;
-  }
-
-  bool _segmentIntersectsRect(Offset start, Offset end, Rect rect) {
-    if (rect.contains(start) || rect.contains(end)) return true;
-    final corners = [
-      rect.topLeft,
-      rect.topRight,
-      rect.bottomRight,
-      rect.bottomLeft,
-    ];
-    for (var index = 0; index < corners.length; index++) {
-      if (_segmentsIntersect(
-        start,
-        end,
-        corners[index],
-        corners[(index + 1) % corners.length],
-      )) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  double _crossProduct(Offset a, Offset b) => a.dx * b.dy - a.dy * b.dx;
-
-  bool _onSegment(Offset start, Offset point, Offset end) =>
-      point.dx >= math.min(start.dx, end.dx) - 0.001 &&
-      point.dx <= math.max(start.dx, end.dx) + 0.001 &&
-      point.dy >= math.min(start.dy, end.dy) - 0.001 &&
-      point.dy <= math.max(start.dy, end.dy) + 0.001;
-}
-
 String _cropName(String cropId) => switch (cropId) {
   OpeningCropCatalog.wheatId => 'Buğday',
   OpeningCropCatalog.maizeId => 'Mısır',
@@ -9997,13 +7339,6 @@ Color _mapCropColor(WorldCropType cropType) => switch (cropType) {
   WorldCropType.oilseed => const Color(0xFF9DAD50),
   WorldCropType.vegetable => const Color(0xFF638F4C),
   WorldCropType.pasture => const Color(0xFF8DA65C),
-};
-
-String _mapCropLabel(WorldCropType cropType) => switch (cropType) {
-  WorldCropType.grain => 'TAHIL',
-  WorldCropType.oilseed => 'YAĞLI TOHUM',
-  WorldCropType.vegetable => 'SEBZE',
-  WorldCropType.pasture => 'MERA',
 };
 
 String _cropLabel(WorldCropType cropType) => switch (cropType) {

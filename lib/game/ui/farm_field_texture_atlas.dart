@@ -27,34 +27,50 @@ class FarmFieldTextureAtlas {
   static const String maizeReadyPath =
       'assets/visual-concepts/pilot/crop-maize-mature-v1.png';
 
+  static ui.Image? _sharedStateAtlas;
+  static ui.Image? _sharedWheatReady;
+  static ui.Image? _sharedMaizeReady;
+  static Future<bool>? _pendingLoad;
+
   ui.Image? _stateAtlas;
   ui.Image? _wheatReady;
   ui.Image? _maizeReady;
   bool _disposed = false;
 
   bool get hasAnyTexture =>
-      _stateAtlas != null || _wheatReady != null || _maizeReady != null;
+      _stateAtlas != null ||
+      _wheatReady != null ||
+      _maizeReady != null ||
+      _sharedStateAtlas != null ||
+      _sharedWheatReady != null ||
+      _sharedMaizeReady != null;
 
-  Future<bool> load() async {
-    if (hasAnyTexture) return true;
-    final loaded = await Future.wait([
-      _loadImage(stateAtlasPath),
-      _loadImage(wheatReadyPath),
-      _loadImage(maizeReadyPath),
-    ]);
-    if (_disposed) {
-      for (final image in loaded) {
-        image?.dispose();
-      }
-      return false;
+  static Future<bool> preload() async {
+    if (_sharedStateAtlas != null || _sharedWheatReady != null || _sharedMaizeReady != null) {
+      return true;
     }
-    _stateAtlas = loaded[0];
-    _wheatReady = loaded[1];
-    _maizeReady = loaded[2];
-    return hasAnyTexture;
+    if (_pendingLoad != null) return _pendingLoad!;
+    _pendingLoad = () async {
+      try {
+        final loaded = await Future.wait([
+          _staticLoadImage(stateAtlasPath),
+          _staticLoadImage(wheatReadyPath),
+          _staticLoadImage(maizeReadyPath),
+        ]);
+        _sharedStateAtlas = loaded[0];
+        _sharedWheatReady = loaded[1];
+        _sharedMaizeReady = loaded[2];
+        return _sharedStateAtlas != null || _sharedWheatReady != null || _sharedMaizeReady != null;
+      } catch (_) {
+        return false;
+      } finally {
+        _pendingLoad = null;
+      }
+    }();
+    return _pendingLoad!;
   }
 
-  Future<ui.Image?> _loadImage(String path) async {
+  static Future<ui.Image?> _staticLoadImage(String path) async {
     try {
       final data = await rootBundle.load(path);
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
@@ -64,10 +80,26 @@ class FarmFieldTextureAtlas {
         codec.dispose();
       }
     } on Object {
-      // Missing optional art falls back to the vector map renderer.
       return null;
     }
   }
+
+  Future<bool> load() async {
+    if (_sharedStateAtlas != null || _sharedWheatReady != null || _sharedMaizeReady != null) {
+      _stateAtlas = _sharedStateAtlas;
+      _wheatReady = _sharedWheatReady;
+      _maizeReady = _sharedMaizeReady;
+      return true;
+    }
+    if (hasAnyTexture) return true;
+    final success = await preload();
+    if (_disposed) return false;
+    _stateAtlas = _sharedStateAtlas;
+    _wheatReady = _sharedWheatReady;
+    _maizeReady = _sharedMaizeReady;
+    return success;
+  }
+
 
   /// Paints a field texture inside its irregular parcel polygon.
   ///

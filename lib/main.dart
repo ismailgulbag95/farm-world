@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flame/game.dart';
@@ -41,7 +42,7 @@ void main() async {
     );
   }
   if (store.canSave) {
-    await store.save(session.state);
+    unawaited(store.save(session.state));
   }
 
   runApp(
@@ -78,11 +79,14 @@ class WorldMapPrototypeApp extends StatefulWidget {
 class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
   late final OpeningSessionAutosaver _autosaver;
 
-  _AppLaunchPhase _phase = _AppLaunchPhase.loading;
+  _AppLaunchPhase _phase = _AppLaunchPhase.worldMap;
 
   @override
   void initState() {
     super.initState();
+    if (widget.session.tutorialStep == FarmTutorialStep.story) {
+      widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
+    }
     _autosaver = OpeningSessionAutosaver(
       session: widget.session,
       store: widget.store,
@@ -97,12 +101,12 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
   }
 
   void _onLoadingComplete() {
+    if (widget.session.tutorialStep == FarmTutorialStep.story) {
+      widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
+      _autosaver.flush();
+    }
     setState(() {
-      if (widget.session.tutorialStep == FarmTutorialStep.story) {
-        _phase = _AppLaunchPhase.comic;
-      } else {
-        _phase = _AppLaunchPhase.worldMap;
-      }
+      _phase = _AppLaunchPhase.worldMap;
     });
   }
 
