@@ -23,7 +23,9 @@ import 'tech_tree_overlay.dart';
 import 'story_comic_screen.dart';
 import '../domain/audio_controller.dart';
 import '../domain/delivery_contracts.dart';
+import '../domain/debug_action_controller.dart';
 import 'farm_companion_hud.dart';
+import 'debug_settings_button.dart';
 
 const Color _mapInk = Color(0xFF18392A);
 const Color _mapGold = Color(0xFFFFC84F);
@@ -79,6 +81,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   String? _selectedFleetVehicleId;
   String? _routeStartParcelId;
   int? _salesRouteStartPlotId;
+  List<WorldMapPoint>? _salesRoutePreviewPath;
   bool _routeMode = false;
   bool _salesRouteMode = false;
   bool _measureMode = false;
@@ -88,17 +91,26 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   bool _showParcels = true;
   bool _showRoutes = true;
   bool _showInfrastructure = true;
+  bool _tutorialManagementVisited = false;
   bool _showFertility = false;
   int _mapRevision = 0;
   late final Timer _farmTicker;
+  Timer? _settlementMarkerDebounce;
   final Map<int, String> _selectedCropByPlot = {};
 
-  static const double _minZoom = 0.10;
-  static const double _maxZoom = 1.85;
+  static const double _minZoom = isometricWorldMapMinZoom;
+  static const double _maxZoom = isometricWorldMapMaxZoom;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_restoreLegacyRoutePaths()) {
+        widget.onSessionChanged();
+        setState(() {});
+      }
+    });
     _selectedFarmPlotId = widget.session.starterPlotId;
     final resumedJobs = widget.session.advanceFarmOperations(DateTime.now());
     final resumedTutorial = widget.session.advanceFarmTutorial(DateTime.now());
@@ -137,6 +149,8 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     final report = widget.offlineProgressReport;
     final hasOfflineReport =
         report != null && report.elapsedDuration >= const Duration(minutes: 1);
+    final shouldStartOpeningStory =
+        widget.session.state.farmTutorialStep == FarmTutorialStep.story;
     if (widget.recoveredFromBackup || hasOfflineReport) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -162,7 +176,13 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               ),
             ],
           ),
-        );
+        ).then((_) {
+          if (shouldStartOpeningStory) _openStoryIfNeeded();
+        });
+      });
+    } else if (shouldStartOpeningStory) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openStoryIfNeeded();
       });
     }
   }
@@ -170,6 +190,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   @override
   void dispose() {
     _farmTicker.cancel();
+    _settlementMarkerDebounce?.cancel();
     _cameraPoseListenable.dispose();
     super.dispose();
   }
@@ -179,6 +200,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (context) => StoryComicScreen(
+          canDismiss: false,
           onComplete: () {
             Navigator.of(context).pop();
             if (widget.session.tutorialStep == FarmTutorialStep.story) {
@@ -198,6 +220,14 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         ),
       ),
     );
+  }
+
+  void _openStoryIfNeeded() {
+    if (!mounted ||
+        widget.session.state.farmTutorialStep != FarmTutorialStep.story) {
+      return;
+    }
+    _openStoryComic();
   }
 
   Offset _screenToWorld(Offset screenPoint) {
@@ -308,6 +338,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       _measureMode = false;
       _routeStartParcelId = null;
       _salesRouteStartPlotId = null;
+      _salesRoutePreviewPath = null;
       _selectedFarmPlotId = null;
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
@@ -514,14 +545,35 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     amountController.dispose();
     if (settings == null || !mounted) return;
 
-    final started = widget.session.startStarterMarketRoute(
-      fieldX: source.mapX,
-      fieldY: source.mapY,
-      fieldName: source.name,
-      productId: settings.productId,
-      amountPerTrip: settings.amountPerTrip,
-      repeatRoute: settings.repeatRoute,
+    final roadPath =
+        _salesRoutePreviewPath ??
+        _world.findRoadRoute(
+          WorldMapPoint(source.mapX, source.mapY),
+          const WorldMapPoint(starterMarketMapX, starterMarketMapY),
+        );
+    if (roadPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu tarladan pazara geçilebilir bir yol bulunamadı.'),
+        ),
+      );
+      return;
+    }
+
+    final started = await DebugActionController.instance.runPlayerAction<bool>(
+      () => widget.session.startStarterMarketRoute(
+        fieldX: source.mapX,
+        fieldY: source.mapY,
+        fieldName: source.name,
+        productId: settings.productId,
+        amountPerTrip: settings.amountPerTrip,
+        repeatRoute: settings.repeatRoute,
+        outboundRoadPath: roadPath
+            .map((point) => RouteWaypoint(point.x, point.y))
+            .toList(growable: false),
+      ),
     );
+    if (!mounted) return;
     if (!started) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Satış hattı şu anda kurulamıyor.')),
@@ -533,6 +585,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     setState(() {
       _salesRouteMode = false;
       _salesRouteStartPlotId = null;
+      _salesRoutePreviewPath = null;
       _selectedFarmPlotId = null;
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
@@ -571,8 +624,21 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       );
       return;
     }
+    final previewPath = _world.findRoadRoute(
+      WorldMapPoint(source.mapX, source.mapY),
+      market,
+    );
+    if (previewPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu tarladan pazara geçilebilir bir yol bulunamadı.'),
+        ),
+      );
+      return;
+    }
     setState(() {
       _salesRouteStartPlotId = source.id;
+      _salesRoutePreviewPath = previewPath;
       _selectedFarmPlotId = null;
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
@@ -740,16 +806,17 @@ class _WorldMapScreenState extends State<WorldMapScreen>
 
   void _setCameraPose(Offset center, double zoom) {
     final pose = clampIsometricCameraPose(
-      MapCameraPose(
-        center: WorldMapPoint(center.dx, center.dy),
-        zoom: zoom,
-      ),
+      MapCameraPose(center: WorldMapPoint(center.dx, center.dy), zoom: zoom),
       _viewportSize,
     );
     _cameraCenter = Offset(pose.center.x, pose.center.y);
     _zoom = pose.zoom;
     if (_cameraPoseListenable.value != pose) {
       _cameraPoseListenable.value = pose;
+      _settlementMarkerDebounce?.cancel();
+      _settlementMarkerDebounce = Timer(const Duration(milliseconds: 140), () {
+        if (mounted) setState(() {});
+      });
     }
   }
 
@@ -797,24 +864,64 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     return null;
   }
 
+  List<RouteWaypoint>? _findRouteWaypoints(
+    double startX,
+    double startY,
+    double endX,
+    double endY,
+  ) {
+    final path = _world.findRoadRoute(
+      WorldMapPoint(startX, startY),
+      WorldMapPoint(endX, endY),
+    );
+    return path
+        ?.map((point) => RouteWaypoint(point.x, point.y))
+        .toList(growable: false);
+  }
+
+  bool _restoreLegacyRoutePaths() {
+    var changed = false;
+    final routes = widget.session.fleetManager.routes;
+    for (var routeIndex = 0; routeIndex < routes.length; routeIndex++) {
+      final route = routes[routeIndex];
+      if (route.stops.length < 2 || route.hasRoadGeometry) continue;
+      final paths = <List<RouteWaypoint>>[];
+      var connected = true;
+      for (var legIndex = 0; legIndex < route.stops.length; legIndex++) {
+        final start = route.stops[legIndex];
+        final end = route.stops[route.nextStopIndex(legIndex)];
+        final path = _findRouteWaypoints(
+          start.positionX,
+          start.positionY,
+          end.positionX,
+          end.positionY,
+        );
+        if (path == null || path.length < 2) {
+          connected = false;
+          break;
+        }
+        paths.add(path);
+      }
+      if (!connected) continue;
+      routes[routeIndex] = route.copyWith(legPaths: paths);
+      changed = true;
+    }
+    return changed;
+  }
+
   Offset _fleetVehicleWorldPoint(FleetVehicleState vehicle) {
     final route = _routeForFleetVehicle(vehicle);
-    if (route == null || route.stops.isEmpty) {
+    if (route == null || route.stops.isEmpty || !route.hasRoadGeometry) {
       return const Offset(-150, -8);
     }
     final currentIndex = vehicle.currentStopIndex
         .clamp(0, route.stops.length - 1)
         .toInt();
-    final start = route.stops[currentIndex];
-    if (route.stops.length == 1) {
-      return Offset(start.positionX, start.positionY);
-    }
-    final end = route.stops[route.nextStopIndex(currentIndex)];
-    return Offset.lerp(
-      Offset(start.positionX, start.positionY),
-      Offset(end.positionX, end.positionY),
-      vehicle.progressToNextStop.clamp(0.0, 1.0).toDouble(),
-    )!;
+    final point = route.positionAlongLeg(
+      currentIndex,
+      vehicle.progressToNextStop,
+    );
+    return Offset(point.x, point.y);
   }
 
   bool _owns(WorldMapParcel parcel) => parcel.isHome
@@ -941,7 +1048,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       to: toParcel.center,
       cost: cost,
     );
-    final purchased = widget.session.addWorldLogisticsLink(link);
+    final purchased = await DebugActionController.instance
+        .runPlayerAction<bool>(
+          () => widget.session.addWorldLogisticsLink(link),
+        );
+    if (!mounted) return;
     setState(() {
       if (purchased) _mapRevision++;
       _routeStartParcelId = null;
@@ -972,20 +1083,22 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       : '${distance.round()} m';
 
   void _buySelectedParcel(WorldMapParcel parcel) {
-    if (widget.session.buyWorldParcel(parcel)) {
-      HapticFeedback.mediumImpact();
-      widget.onSessionChanged();
-      final plot = widget.session.plotForWorldParcel(parcel.id);
-      setState(() {
-        _mapRevision++;
-        _selectedParcelId = null;
-        _selectedFarmPlotId = plot?.id;
-        _selectedFleetVehicleId = null;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${parcel.name} satın alındı.')));
-    }
+    _runPlayerAction(() {
+      if (widget.session.buyWorldParcel(parcel)) {
+        HapticFeedback.mediumImpact();
+        widget.onSessionChanged();
+        final plot = widget.session.plotForWorldParcel(parcel.id);
+        setState(() {
+          _mapRevision++;
+          _selectedParcelId = null;
+          _selectedFarmPlotId = plot?.id;
+          _selectedFleetVehicleId = null;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${parcel.name} satın alındı.')));
+      }
+    });
   }
 
   void _closeParcelCard() => setState(() {
@@ -1005,48 +1118,66 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   );
 
   void _buyFarmPlot(CropPlotState plot) {
-    if (!widget.session.buyPlot(plot.id)) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
-    HapticFeedback.mediumImpact();
+    _runPlayerAction(() {
+      if (!widget.session.buyPlot(plot.id)) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+      HapticFeedback.mediumImpact();
+    });
   }
 
   void _prepareFarmPlot(CropPlotState plot) {
-    if (!widget.session.cultivatePlot(plot.id)) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.cultivatePlot(plot.id)) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
   }
 
   void _fertilizeFarmPlot(CropPlotState plot) {
-    if (!widget.session.fertilizePlot(plot.id)) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.fertilizePlot(plot.id)) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
   }
 
   void _plantFarmPlot(CropPlotState plot, String cropId) {
-    if (!widget.session.plantCropOnPlot(plot.id, cropId, DateTime.now())) {
-      return;
-    }
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.plantCropOnPlot(plot.id, cropId, DateTime.now())) {
+        return;
+      }
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
   }
 
   void _harvestFarmPlot(CropPlotState plot) {
-    if (!widget.session.harvestCropOnPlot(plot.id, DateTime.now())) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.harvestCropOnPlot(plot.id, DateTime.now())) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
   }
 
   void _baleFarmPlot(CropPlotState plot) {
-    if (!widget.session.balePasturePlot(plot.id, DateTime.now())) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.balePasturePlot(plot.id, DateTime.now())) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
   }
 
   void _sellPastureBales(CropPlotState plot) {
-    if (!widget.session.sellPastureBales(plot.id)) return;
-    widget.onSessionChanged();
-    setState(() => _mapRevision++);
+    _runPlayerAction(() {
+      if (!widget.session.sellPastureBales(plot.id)) return;
+      widget.onSessionChanged();
+      setState(() => _mapRevision++);
+    });
+  }
+
+  void _runPlayerAction(VoidCallback action) {
+    unawaited(DebugActionController.instance.runPlayerAction<void>(action));
   }
 
   void _jumpToPlot(CropPlotState plot) {
@@ -1062,10 +1193,8 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   }
 
   Future<void> _openManagement() async {
-    if (widget.session.state.farmTutorialStep == FarmTutorialStep.management) {
-      widget.session.setFarmTutorialStep(FarmTutorialStep.complete);
-      widget.onSessionChanged();
-    }
+    final managementTutorialActive =
+        widget.session.state.farmTutorialStep == FarmTutorialStep.management;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1075,6 +1204,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         session: widget.session,
         onSelectPlot: _jumpToPlot,
         onSelectVehicle: _jumpToFleetVehicle,
+        findDrivableRoute: _findRouteWaypoints,
         onChanged: () {
           widget.onSessionChanged();
           if (mounted) setState(() {});
@@ -1082,7 +1212,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       ),
     );
     widget.onSessionChanged();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        if (managementTutorialActive) _tutorialManagementVisited = true;
+      });
+    }
   }
 
   Future<void> _openMarketTrade() async {
@@ -1093,6 +1227,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => MarketTradeSheet(
         session: widget.session,
+        findDrivableRoute: _findRouteWaypoints,
         onChanged: () {
           widget.onSessionChanged();
           if (mounted) setState(() {});
@@ -1195,10 +1330,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       _selectedParcelId = null;
       _selectedFleetVehicleId = null;
     });
-    _openMarketTrade();
+    if (!_salesRouteMode) _openMarketTrade();
   }
 
   Future<void> _openCoordinateSearch() async {
+    final worldBounds = ProceduralFarmWorld.worldBounds;
     final xController = TextEditingController(
       text: _cameraCenter.dx.round().toString(),
     );
@@ -1213,7 +1349,11 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Dünya koordinatları metre cinsindedir.'),
+            Text(
+              'Dünya koordinatları metre cinsindedir. Harita sınırları: '
+              'X ${worldBounds.left.round()}–${worldBounds.right.round()} m, '
+              'Y ${worldBounds.top.round()}–${worldBounds.bottom.round()} m.',
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1255,8 +1395,10 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   y == null ||
                   !x.isFinite ||
                   !y.isFinite ||
-                  x.abs() > 1000000000000 ||
-                  y.abs() > 1000000000000) {
+                  x < worldBounds.left ||
+                  x > worldBounds.right ||
+                  y < worldBounds.top ||
+                  y > worldBounds.bottom) {
                 return;
               }
               Navigator.pop(context, Offset(x, y));
@@ -1433,6 +1575,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
   List<IsometricMapMarker> _isometricMapMarkers({
     required Offset playerPoint,
     required bool hasMarketOrder,
+    required Rect settlementBounds,
   }) {
     final markers = <IsometricMapMarker>[
       IsometricMapMarker(
@@ -1466,7 +1609,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
       );
     }
 
-    for (final settlement in _world.settlements) {
+    for (final settlement in _world.settlementsInBounds(settlementBounds)) {
       final size = switch (settlement.kind) {
         WorldMapSettlementKind.city => 66.0,
         WorldMapSettlementKind.town => 48.0,
@@ -1526,6 +1669,19 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     return markers;
   }
 
+  Rect get _visibleSettlementBounds {
+    final viewport = _viewportSize.isEmpty
+        ? const Size(960, 720)
+        : _viewportSize;
+    return visibleWorldBoundsForPose(
+      MapCameraPose(
+        center: WorldMapPoint(_cameraCenter.dx, _cameraCenter.dy),
+        zoom: _zoom,
+      ),
+      viewport,
+    );
+  }
+
   void _handleIsometricMarkerTap(
     String markerId,
     WorldMapPoint worldPoint,
@@ -1583,7 +1739,9 @@ class _WorldMapScreenState extends State<WorldMapScreen>
     }
     if (markerId.startsWith('settlement:')) {
       final settlementId = markerId.substring('settlement:'.length);
-      for (final settlement in _world.settlements) {
+      for (final settlement in _world.settlementsInBounds(
+        _visibleSettlementBounds,
+      )) {
         if (settlement.id != settlementId) continue;
         final region = _world.regionAt(settlement.position);
         setState(() {
@@ -1726,14 +1884,19 @@ class _WorldMapScreenState extends State<WorldMapScreen>
             .where((plot) => plot.isOwned)
             .map((plot) => Offset(plot.mapX, plot.mapY))
             .toList(growable: false);
-        final radarRoutes = widget.session.fleetManager.routes
-            .where((route) => route.stops.length > 1)
-            .map(
-              (route) => route.stops
-                  .map((stop) => Offset(stop.positionX, stop.positionY))
-                  .toList(growable: false),
-            )
-            .toList(growable: false);
+        final radarRoutes = [
+          for (final route in widget.session.fleetManager.routes)
+            if (route.hasRoadGeometry)
+              for (
+                var legIndex = 0;
+                legIndex < (route.stops.length == 2 ? 1 : route.stops.length);
+                legIndex++
+              )
+                route
+                    .pathForLeg(legIndex)
+                    .map((point) => Offset(point.x, point.y))
+                    .toList(growable: false),
+        ];
         final hasMarketOrder = widget.session.contractManager.visibleContracts
             .any(
               (contract) =>
@@ -1747,6 +1910,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         final isometricMarkers = _isometricMapMarkers(
           playerPoint: playerPoint,
           hasMarketOrder: hasMarketOrder,
+          settlementBounds: _visibleSettlementBounds,
         );
         final visibleIsometricMarkers = _showInfrastructure
             ? isometricMarkers
@@ -1756,28 +1920,25 @@ class _WorldMapScreenState extends State<WorldMapScreen>
         final isometricPaths = <IsometricMapPath>[
           if (_showRoutes)
             for (final route in widget.session.fleetManager.routes)
-              if (route.isActive && route.stops.length > 1)
-                IsometricMapPath(
-                  id: 'logistics:${route.id}',
-                  points: route.stops
-                      .map(
-                        (stop) =>
-                            WorldMapPoint(stop.positionX, stop.positionY),
-                      )
-                      .toList(growable: false),
-                  color: 0xffe2b64f,
-                  width: 6,
-                ),
-          if (salesRouteStartPlot != null)
+              if (route.isActive && route.hasRoadGeometry)
+                for (
+                  var legIndex = 0;
+                  legIndex < (route.stops.length == 2 ? 1 : route.stops.length);
+                  legIndex++
+                )
+                  IsometricMapPath(
+                    id: 'logistics:${route.id}:$legIndex',
+                    points: route
+                        .pathForLeg(legIndex)
+                        .map((point) => WorldMapPoint(point.x, point.y))
+                        .toList(growable: false),
+                    color: 0xffe2b64f,
+                    width: 6,
+                  ),
+          if (salesRouteStartPlot != null && _salesRoutePreviewPath != null)
             IsometricMapPath(
               id: 'sales-route-preview',
-              points: [
-                WorldMapPoint(
-                  salesRouteStartPlot.mapX,
-                  salesRouteStartPlot.mapY,
-                ),
-                const WorldMapPoint(starterMarketMapX, starterMarketMapY),
-              ],
+              points: _salesRoutePreviewPath!,
               color: 0xffe98c3c,
               width: 8,
             ),
@@ -1828,8 +1989,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                   if (plot.isOwned && plot.mapParcelId != null)
                     plot.mapParcelId!,
               },
-              selectedParcelId:
-                  _selectedParcelId ?? selectedPlot?.mapParcelId,
+              selectedParcelId: _selectedParcelId ?? selectedPlot?.mapParcelId,
               cameraPose: MapCameraPose(
                 center: WorldMapPoint(_cameraCenter.dx, _cameraCenter.dy),
                 zoom: _zoom,
@@ -1859,10 +2019,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
               builder: (context, pose, child) => IgnorePointer(
                 child: Stack(
                   clipBehavior: Clip.none,
-                  children: _isometricMapLabels(
-                    visibleIsometricMarkers,
-                    pose,
-                  ),
+                  children: _isometricMapLabels(visibleIsometricMarkers, pose),
                 ),
               ),
             ),
@@ -1883,6 +2040,8 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                           balance: balance,
                           onOpenResearch: _openResearch,
                           onOpenEquipment: _openEquipmentStore,
+                          equipmentHighlighted:
+                              tutorialStep == FarmTutorialStep.shop,
                           onBeginConstruction: _beginConstructionPlacement,
                           constructionActive: _constructionPlacementMode,
                           onOpenManagement: _openManagement,
@@ -1891,7 +2050,6 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                           onOpenWarehouse: _openWarehouseInventory,
                           warehouseHighlighted:
                               tutorialStep == FarmTutorialStep.warehouse ||
-                              tutorialStep == FarmTutorialStep.deliveryRoute ||
                               tutorialStep == FarmTutorialStep.delivery,
                           warehouseStock:
                               widget.session.fleetManager.totalWarehouseAmount +
@@ -1917,25 +2075,20 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                                 child: _FarmTutorialCoach(
                                   step: tutorialStep,
                                   plot: tutorialPlot,
+                                  cropName: _cropName(
+                                    tutorialPlot == null
+                                        ? OpeningCropCatalog.all.first.id
+                                        : _selectedCrop(tutorialPlot),
+                                  ),
                                   session: widget.session,
+                                  managementViewed: _tutorialManagementVisited,
                                   onOpenComic: _openStoryComic,
-                                  onBegin: () {
+                                  onCompleteTutorial: () {
                                     widget.session.setFarmTutorialStep(
-                                      FarmTutorialStep.prepare,
+                                      FarmTutorialStep.complete,
                                     );
                                     widget.onSessionChanged();
-                                    final starter = widget.session.plotById(
-                                      widget.session.starterPlotId,
-                                    );
-                                    setState(() {
-                                      if (starter != null) {
-                                        _selectedFarmPlotId = starter.id;
-                                        _setCameraPose(
-                                          Offset(starter.mapX, starter.mapY),
-                                          0.9,
-                                        );
-                                      }
-                                    });
+                                    setState(() {});
                                   },
                                 ),
                               )
@@ -2029,7 +2182,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                         building: selectedBuilding,
                         now: DateTime.now(),
                         onClose: _closeParcelCard,
-                        onResume: () {
+                        onResume: DebugActionController.instance.actionCallback(() {
                           final resumed = widget.session
                               .resumeBuildingAfterOperatingCost(
                                 selectedBuilding.parcelId,
@@ -2046,7 +2199,7 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                           }
                           widget.onSessionChanged();
                           setState(() {});
-                        },
+                        }),
                       ),
                     ),
                   ),
@@ -2138,18 +2291,20 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                         maxHeight: selectedPanelHeight,
                         onClose: () =>
                             setState(() => _selectedFleetVehicleId = null),
-                        onPause: () {
-                          if (widget.session.setFleetVehiclePaused(
-                            selectedVehicle.id,
-                            !selectedVehicle.isIndividuallyPaused,
-                          )) {
-                            widget.onSessionChanged();
-                            setState(() {});
-                          }
-                        },
+                        onPause: DebugActionController.instance.actionCallback(
+                          () {
+                            if (widget.session.setFleetVehiclePaused(
+                              selectedVehicle.id,
+                              !selectedVehicle.isIndividuallyPaused,
+                            )) {
+                              widget.onSessionChanged();
+                              setState(() {});
+                            }
+                          },
+                        ),
                         onToggleRoute: selectedVehicle.assignedRouteId == null
                             ? null
-                            : () {
+                            : DebugActionController.instance.actionCallback(() {
                                 final assignedRoute = widget
                                     .session
                                     .fleetManager
@@ -2167,8 +2322,8 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                                   widget.onSessionChanged();
                                   setState(() {});
                                 }
-                              },
-                        onCancel: () {
+                              }),
+                        onCancel: DebugActionController.instance.actionCallback(() {
                           FleetVehicleState? currentVehicle;
                           for (final vehicle
                               in widget.session.fleetManager.vehicles) {
@@ -2198,33 +2353,42 @@ class _WorldMapScreenState extends State<WorldMapScreen>
                               ),
                             ),
                           );
-                        },
-                        onCancelQueued: (queueIndex) {
-                          if (widget.session.cancelQueuedFleetRoute(
-                            selectedVehicle.id,
-                            queueIndex,
-                          )) {
-                            widget.onSessionChanged();
-                            setState(() {});
-                          }
-                        },
-                        onQueueRoute: (routeId) {
-                          if (widget.session.queueFleetRoute(
-                            selectedVehicle.id,
-                            routeId,
-                          )) {
-                            widget.onSessionChanged();
-                            setState(() {});
-                          }
-                        },
-                        onService: () {
-                          if (widget.session.serviceFleetVehicle(
-                            selectedVehicle.id,
-                          )) {
-                            widget.onSessionChanged();
-                            setState(() {});
-                          }
-                        },
+                        }),
+                        onCancelQueued: (queueIndex) => unawaited(
+                          DebugActionController.instance.runPlayerAction<void>(
+                            () {
+                              if (widget.session.cancelQueuedFleetRoute(
+                                selectedVehicle.id,
+                                queueIndex,
+                              )) {
+                                widget.onSessionChanged();
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                        onQueueRoute: (routeId) => unawaited(
+                          DebugActionController.instance.runPlayerAction<void>(
+                            () {
+                              if (widget.session.queueFleetRoute(
+                                selectedVehicle.id,
+                                routeId,
+                              )) {
+                                widget.onSessionChanged();
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        ),
+                        onService: DebugActionController.instance
+                            .actionCallback(() {
+                              if (widget.session.serviceFleetVehicle(
+                                selectedVehicle.id,
+                              )) {
+                                widget.onSessionChanged();
+                                setState(() {});
+                              }
+                            }),
                       ),
                     ),
                   ),
@@ -2371,6 +2535,7 @@ class _TopActionBar extends StatelessWidget {
     required this.balance,
     required this.onOpenResearch,
     required this.onOpenEquipment,
+    required this.equipmentHighlighted,
     required this.onBeginConstruction,
     required this.constructionActive,
     required this.onOpenManagement,
@@ -2389,6 +2554,7 @@ class _TopActionBar extends StatelessWidget {
   final int balance;
   final VoidCallback onOpenResearch;
   final VoidCallback onOpenEquipment;
+  final bool equipmentHighlighted;
   final VoidCallback onBeginConstruction;
   final bool constructionActive;
   final VoidCallback onOpenManagement;
@@ -2407,8 +2573,8 @@ class _TopActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasHighlightedAction =
         constructionActive ||
+        equipmentHighlighted ||
         managementHighlighted ||
-        warehouseHighlighted ||
         salesHighlighted;
 
     void openFeatureMenu() {
@@ -2497,7 +2663,6 @@ class _TopActionBar extends StatelessWidget {
                   icon: Icons.inventory_2_rounded,
                   label: 'Ambar · $warehouseStock',
                   onTap: onOpenWarehouse,
-                  highlighted: warehouseHighlighted,
                 ),
                 actionTile(
                   icon: Icons.storefront_rounded,
@@ -2515,6 +2680,7 @@ class _TopActionBar extends StatelessWidget {
                   icon: Icons.storefront_rounded,
                   label: 'Ekipman deposu',
                   onTap: onOpenEquipment,
+                  highlighted: equipmentHighlighted,
                 ),
                 actionTile(
                   icon: Icons.construction_rounded,
@@ -2567,8 +2733,18 @@ class _TopActionBar extends StatelessWidget {
           const SizedBox(width: 7),
           Expanded(
             child: Material(
-              color: const Color(0xFFEAF0DA),
-              borderRadius: BorderRadius.circular(12),
+              color: warehouseHighlighted
+                  ? const Color(0xFFFFF0C8)
+                  : const Color(0xFFEAF0DA),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: warehouseHighlighted
+                      ? const Color(0xFFFFB02E)
+                      : Colors.transparent,
+                  width: warehouseHighlighted ? 1.8 : 0,
+                ),
+              ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: onOpenWarehouse,
@@ -2649,6 +2825,8 @@ class _TopActionBar extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 4),
+          const DebugSettingsButton(),
         ],
       ),
     );
@@ -2877,15 +3055,19 @@ class _FarmTutorialCoach extends StatelessWidget {
   const _FarmTutorialCoach({
     required this.step,
     required this.plot,
+    required this.cropName,
     required this.session,
-    required this.onBegin,
+    required this.managementViewed,
+    required this.onCompleteTutorial,
     this.onOpenComic,
   });
 
   final FarmTutorialStep step;
   final CropPlotState? plot;
+  final String cropName;
   final OpeningSession session;
-  final VoidCallback onBegin;
+  final bool managementViewed;
+  final VoidCallback onCompleteTutorial;
   final VoidCallback? onOpenComic;
 
   @override
@@ -2897,70 +3079,72 @@ class _FarmTutorialCoach extends StatelessWidget {
     );
     final (title, message, stepIndex) = switch (step) {
       FarmTutorialStep.story => (
-        'AYLA USTA’NIN MİRASI: DEMİR MAHSUL',
-        'Ayla Demirsoy ve dedenin emanetleri gün yüzüne çıktı: Takviyeli Kıyı 18 traktörü, ata tohumları ve Kuzey Tarlası hazır. Çizgi romanı incele ve vadiyi ayağa kaldır!',
+        'AKPINAR’DA İLK SEZON',
+        'Deden Akpınar’daki tarlayı sana bıraktı. Ben Ayla; ilk hasadına kadar her adımda yanındayım.',
         0,
       ),
       FarmTutorialStep.prepare => (
         '1 · TARLAYI HAZIRLA',
         job?.operation == FarmOperation.prepare
-            ? 'Kültivatör tarlada çalışıyor. ${_formatRemaining(job!.completesAt.difference(DateTime.now()))} sonra ekim alanı hazır.'
-            : 'Aşağıdaki parsel kartında “Tarlayı hazırla” düğmesine dokun. İş bitince gübreleme açılacak.',
+            ? 'Kültivatör çalışıyor. ${_formatRemaining(job!.completesAt.difference(DateTime.now()))} sonra tarlamız hazır.'
+            : 'Seçili “${plot?.name ?? 'başlangıç tarlası'}” kartında sarı çerçeveli “TARLAYI HAZIRLA” düğmesine dokun. Kart kapalıysa haritada kendi tarlana dokun.',
         1,
       ),
       FarmTutorialStep.fertilize => (
         '2 · GÜBRELE',
         job?.operation == FarmOperation.fertilize
-            ? 'Serpici tarlayı besliyor. İş tamamlanınca ekim adımına geçeceğiz.'
-            : 'Toprağı iyileştirmek için parsel kartındaki “Gübrele” düğmesine dokun.',
+            ? 'Serpici toprağı besliyor. İş bitince ekime geçeceğiz.'
+            : 'Aynı tarla kartındaki sarı çerçeveli “GÜBRELE” düğmesine dokun.',
         2,
       ),
       FarmTutorialStep.sow => (
-        '3 · BUĞDAY EK',
+        '3 · TOHUMU EK',
         job?.operation == FarmOperation.sow
-            ? 'Mibzer tohumu sıralara bırakıyor. Ekim bitince ürün büyümeye başlayacak.'
-            : 'Parsel kartında buğdayı seçip “Ekim yap” düğmesine dokun. Tohum ücreti tarlanın alanına göre hesaplanır.',
+            ? 'Mibzer tohumu ekiyor. İş bitince büyümeyi izleyeceğiz.'
+            : 'Tarla kartındaki ürün listesinden $cropName’ı seç; sonra sarı çerçeveli “EKİM YAP” düğmesine dokun.',
         3,
       ),
       FarmTutorialStep.growth => (
         '4 · BÜYÜMEYİ İZLE',
         snapshot == null
-            ? 'Ekin tarlada. Büyüme tamamlanınca hasat düğmesini göstereceğim.'
+            ? 'Ekin tarlada. Aynı karttaki büyüme çubuğunu izle; hazır olunca hasat düğmesi parlar.'
             : snapshot.isHarvestable
-            ? 'Buğday olgunlaştı. Hasat için parsel kartındaki vurgulu düğmeye dokun.'
-            : 'İlk öğretici ekiminde büyüme birkaç saniye sürer. Normal oyunda buğday ve mısır 6 dakikada olgunlaşır.',
+            ? '$cropName olgunlaştı. Tarla kartındaki sarı çerçeveli “HASAT ET” düğmesine dokun.'
+            : 'Rehber ekini 15 saniyede büyür. Normal buğday ve mısır çevrimi 6 dakikadır.',
         4,
       ),
       FarmTutorialStep.harvest => (
         '5 · HASAT ET',
         job?.operation == FarmOperation.harvest
-            ? 'Biçerdöver çalışıyor. Ürün satılmadan ambara gidecek; satış için bir sonraki adımda hattı sen kuracaksın.'
-            : 'Buğday hazır. Parsel kartındaki “Hasat et” düğmesiyle ürünü satış yapılmadan ambara gönder.',
+            ? 'Biçerdöver çalışıyor. Hasat ambara gidecek; pazara satış hattını birlikte kuracağız.'
+            : 'Tarla kartındaki sarı çerçeveli “HASAT ET · AMBARA GÖNDER” düğmesine dokun.',
         5,
       ),
       FarmTutorialStep.warehouse => (
         '6 · AMBARI AÇ',
-        'Hasat satılmadı; ürünün ambar stoğunda bekliyor. Üstteki Ambar düğmesine dokun ve stoğu incele.',
+        'Hasat henüz satılmadı. Üst çubuktaki sarı “Ambar” kutusuna dokun; panelde stoğu gör ve “HARİTADA SATIŞ ROTASI ÇİZ” düğmesine bas.',
         6,
       ),
       FarmTutorialStep.deliveryRoute => (
         '7 · SATIŞ HATTI KUR',
-        'Önce Kasaba Pazarı işaretini bul. Vurgulanan “Satış rotası çiz” düğmesine dokun; sonra haritada sahip olduğun hasat tarlasını ve pazarı sırayla seçerek ilk hattı kendin oluştur.',
+        'Haritada önce hasat tarlana, sonra “Kasaba Pazarı” işaretine dokun. Açılan pencerede varsayılanları bırakıp “HATTI KUR”a bas. Pazar görünmüyorsa sağ üst menüden “Kasaba pazarına git”i seç.',
         7,
       ),
       FarmTutorialStep.delivery => (
         '8 · SEVKİYATI İZLE',
-        'Hat çalışıyor. Kamyon ürünü pazara ulaştırınca satış bedeli bakiyene eklenecek; Ambar’dan stok ve araç yükünü izleyebilirsin.',
+        'Kamyon pazara gidiyor. Satış geliri bakiyene eklenince üstteki “Ambar” kutusuna dokunup teslimatı ve araç yükünü incele.',
         8,
       ),
       FarmTutorialStep.shop => (
         '9 · EKİPMAN MAĞAZASI',
-        'İlk satış tamamlandı. Üstteki vurgulu Ekipman düğmesine dokun; daha hızlı makineleri, fiyatlarını ve etkilerini incele.',
+        'İlk satış tamamlandı. Sağ üstteki ızgara menüsüne dokun, sarı çerçeveli “Ekipman deposu”nu aç ve bir makinenin fiyatı ile etkisini incele. Kapatmak için paneli aşağı kaydır.',
         9,
       ),
       FarmTutorialStep.management => (
         '10 · ÇİFTLİĞİ YÖNET',
-        'Üstteki Yönetim düğmesi bütün tarlaların durumunu, ekili ürünü ve görevdeki araçları gösterir. Açınca rehber tamamlanır.',
+        managementViewed
+            ? 'Son keşif: haritayı tek parmakla kaydır, iki parmakla yakınlaş. Sahipsiz bir parsele dokunup fiyatını ve toprağını oku; kartı X ile kapat. Hazır olunca “REHBERİ TAMAMLA”ya bas.'
+            : 'Sağ üstteki ızgara menüsüne dokun, sarı çerçeveli “Çiftlik yönetimi”ni aç. “Araziler” ve “Filo” sekmelerini incele; üst tutamacı aşağı kaydırıp haritaya dön.',
         10,
       ),
       FarmTutorialStep.complete => ('', '', 10),
@@ -3009,6 +3193,16 @@ class _FarmTutorialCoach extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                const Text(
+                  'AYLA USTA · İLK 10 DK',
+                  style: TextStyle(
+                    color: Color(0xFF8A6D23),
+                    fontSize: 7.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 1),
                 Text(
                   title,
                   maxLines: 1,
@@ -3023,7 +3217,7 @@ class _FarmTutorialCoach extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   message,
-                  maxLines: 3,
+                  maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF475847),
@@ -3077,25 +3271,6 @@ class _FarmTutorialCoach extends StatelessWidget {
                             ),
                           ),
                         ),
-                      SizedBox(
-                        height: 32,
-                        child: FilledButton.icon(
-                          onPressed: onBegin,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFC84F),
-                            foregroundColor: const Color(0xFF35270D),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-                          icon: const Icon(Icons.play_arrow_rounded, size: 17),
-                          label: const Text(
-                            'TARLAYA GİT',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ] else if (onOpenComic != null) ...[
@@ -3126,6 +3301,33 @@ class _FarmTutorialCoach extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (step == FarmTutorialStep.management &&
+                      managementViewed) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: onCompleteTutorial,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF28583D),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.check_rounded, size: 14),
+                        label: const Text(
+                          'REHBERİ TAMAMLA',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -4821,12 +5023,12 @@ class _LogisticsStorePageState extends State<_LogisticsStorePage> {
                   researchLabel: missingResearch
                       ? _technologyName(requirement)
                       : null,
-                  onPressed: () {
+                  onPressed: DebugActionController.instance.actionCallback(() {
                     if (widget.session.buyTruck(type)) {
                       widget.onChanged();
                       setState(() {});
                     }
-                  },
+                  }),
                 );
               }
 
@@ -4867,12 +5069,12 @@ class _LogisticsStorePageState extends State<_LogisticsStorePage> {
                 researchLabel: missing.isEmpty
                     ? null
                     : missing.map(_technologyName).join(' · '),
-                onPressed: () {
+                onPressed: DebugActionController.instance.actionCallback(() {
                   if (widget.session.buyTrailer(type, vehicleId!)) {
                     widget.onChanged();
                     setState(() {});
                   }
-                },
+                }),
               );
             },
           ),
@@ -5898,14 +6100,14 @@ class _EquipmentBundleCard extends StatelessWidget {
                     ),
                     FilledButton.icon(
                       onPressed: canBuy
-                          ? () {
+                          ? DebugActionController.instance.actionCallback(() {
                               if (session.buyEquipmentPack(
                                 bundle.equipmentIds,
                                 discount: bundle.discount,
                               )) {
                                 onChanged();
                               }
-                            }
+                            })
                           : null,
                       icon: Icon(
                         missing.isEmpty
@@ -6168,11 +6370,12 @@ class _EquipmentStoreCard extends StatelessWidget {
                               )
                             : OutlinedButton.icon(
                                 onPressed: canEquip
-                                    ? () {
+                                    ? DebugActionController.instance
+                                          .actionCallback(() {
                                         if (session.equipEquipment(item.id)) {
                                           onChanged();
                                         }
-                                      }
+                                      })
                                     : null,
                                 icon: const Icon(
                                   Icons.construction_rounded,
@@ -6193,14 +6396,14 @@ class _EquipmentStoreCard extends StatelessWidget {
                               ))
                       : FilledButton.icon(
                           onPressed: canBuy
-                              ? () {
+                              ? DebugActionController.instance.actionCallback(() {
                                   if (session.buyEquipment(
                                     item.id,
                                     usedOffer: usedOffer,
                                   )) {
                                     onChanged();
                                   }
-                                }
+                                })
                               : null,
                           icon: const Icon(
                             Icons.shopping_cart_rounded,
@@ -7105,7 +7308,7 @@ class _FarmConstructionMenuState extends State<_FarmConstructionMenu> {
             width: 70,
             child: FilledButton(
               onPressed: canBuild
-                  ? () {
+                  ? DebugActionController.instance.actionCallback(() {
                       final started = widget.session.startBuildingConstruction(
                         item.id,
                         widget.parcel,
@@ -7113,7 +7316,7 @@ class _FarmConstructionMenuState extends State<_FarmConstructionMenu> {
                       if (!started) return;
                       Navigator.pop(context);
                       widget.onBuilt();
-                    }
+                    })
                   : null,
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),

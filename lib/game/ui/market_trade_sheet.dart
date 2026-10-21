@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/delivery_contracts.dart';
+import '../domain/debug_action_controller.dart';
 import '../domain/farm_item_catalog.dart';
 import '../domain/logistics_fleet.dart';
 import '../domain/market_price_simulator.dart';
@@ -17,6 +18,13 @@ const Color _marketGreen = Color(0xFF28583D);
 const Color _marketGold = Color(0xFFFFC84F);
 const Color _marketBg = Color(0xFFF7F9F5);
 const Color _marketCardBg = Color(0xFFFFFFFF);
+
+typedef DrivableRouteFinder = List<RouteWaypoint>? Function(
+  double startX,
+  double startY,
+  double endX,
+  double endY,
+);
 
 String _formatCredits(num amount) {
   if (amount >= 1000000) {
@@ -34,17 +42,28 @@ class MarketTradeSheet extends StatefulWidget {
     super.key,
     required this.session,
     required this.onChanged,
+    this.findDrivableRoute,
   });
 
   final OpeningSession session;
   final VoidCallback onChanged;
+  final DrivableRouteFinder? findDrivableRoute;
 
-  static void show(BuildContext context, OpeningSession session, VoidCallback onChanged) {
+  static void show(
+    BuildContext context,
+    OpeningSession session,
+    VoidCallback onChanged,
+    DrivableRouteFinder? findDrivableRoute,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => MarketTradeSheet(session: session, onChanged: onChanged),
+      builder: (ctx) => MarketTradeSheet(
+        session: session,
+        onChanged: onChanged,
+        findDrivableRoute: findDrivableRoute,
+      ),
     );
   }
 
@@ -94,7 +113,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
     }..removeWhere((id) => id.isEmpty);
 
     final list = itemIds.toList();
-    list.sort((a, b) => FarmItemCatalog.nameFor(a).compareTo(FarmItemCatalog.nameFor(b)));
+    list.sort(
+      (a, b) =>
+          FarmItemCatalog.nameFor(a).compareTo(FarmItemCatalog.nameFor(b)),
+    );
     return list;
   }
 
@@ -137,7 +159,11 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                     color: _marketGreen,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.storefront_rounded, color: _marketGold, size: 24),
+                  child: const Icon(
+                    Icons.storefront_rounded,
+                    color: _marketGold,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -165,7 +191,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: _marketGreen,
                     borderRadius: BorderRadius.circular(20),
@@ -173,7 +202,11 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.monetization_on, color: _marketGold, size: 16),
+                      const Icon(
+                        Icons.monetization_on,
+                        color: _marketGold,
+                        size: 16,
+                      ),
                       const SizedBox(width: 5),
                       Text(
                         '${_formatCredits(credits)} ÇK',
@@ -197,11 +230,23 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             unselectedLabelColor: const Color(0xFF7D8C7B),
             indicatorColor: _marketGreen,
             indicatorWeight: 3,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
             tabs: const [
-              Tab(icon: Icon(Icons.trending_up_rounded, size: 20), text: 'Borsa & Fiyatlar'),
-              Tab(icon: Icon(Icons.local_shipping_rounded, size: 20), text: 'Sevkiyat Başlat'),
-              Tab(icon: Icon(Icons.assignment_turned_in_rounded, size: 20), text: 'Sözleşmeler'),
+              Tab(
+                icon: Icon(Icons.trending_up_rounded, size: 20),
+                text: 'Borsa & Fiyatlar',
+              ),
+              Tab(
+                icon: Icon(Icons.local_shipping_rounded, size: 20),
+                text: 'Sevkiyat Başlat',
+              ),
+              Tab(
+                icon: Icon(Icons.assignment_turned_in_rounded, size: 20),
+                text: 'Sözleşmeler',
+              ),
             ],
           ),
 
@@ -242,7 +287,11 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: _marketGreen, size: 20),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: _marketGreen,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -265,9 +314,21 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
         final name = FarmItemCatalog.nameFor(itemId);
 
         final trendIcon = switch (quote.trend) {
-          PriceTrend.rising => const Icon(Icons.trending_up, color: Color(0xFF2E7D32), size: 18),
-          PriceTrend.falling => const Icon(Icons.trending_down, color: Color(0xFFC62828), size: 18),
-          PriceTrend.stable => const Icon(Icons.trending_flat, color: Color(0xFF616161), size: 18),
+          PriceTrend.rising => const Icon(
+            Icons.trending_up,
+            color: Color(0xFF2E7D32),
+            size: 18,
+          ),
+          PriceTrend.falling => const Icon(
+            Icons.trending_down,
+            color: Color(0xFFC62828),
+            size: 18,
+          ),
+          PriceTrend.stable => const Icon(
+            Icons.trending_flat,
+            color: Color(0xFF616161),
+            size: 18,
+          ),
         };
 
         final trendLabel = switch (quote.trend) {
@@ -286,7 +347,9 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
           margin: const EdgeInsets.only(bottom: 8),
           color: _marketCardBg,
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(
@@ -295,7 +358,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   backgroundColor: const Color(0xFFEDF3E8),
                   child: Text(
                     name.isNotEmpty ? name.characters.first : '?',
-                    style: const TextStyle(color: _marketGreen, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: _marketGreen,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -378,7 +444,11 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.inventory_2_outlined, size: 64, color: Color(0xFF9FB09B)),
+              const Icon(
+                Icons.inventory_2_outlined,
+                size: 64,
+                color: Color(0xFF9FB09B),
+              ),
               const SizedBox(height: 12),
               const Text(
                 'Ambarınızda Satılabilir Ürün Yok',
@@ -405,11 +475,14 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
     if (!hasResearchL01) {
       _selectedDispatchItemId = stockItems.first.cropId;
     }
-    if (_selectedDispatchItemId == null || !availableItemIds.contains(_selectedDispatchItemId)) {
+    if (_selectedDispatchItemId == null ||
+        !availableItemIds.contains(_selectedDispatchItemId)) {
       _selectedDispatchItemId = availableItemIds.first;
     }
 
-    final currentItemStock = session.warehouseAmountFor(_selectedDispatchItemId!);
+    final currentItemStock = session.warehouseAmountFor(
+      _selectedDispatchItemId!,
+    );
     final quote = session.marketQuote(_selectedDispatchItemId!);
     final vehicles = session.fleetManager.vehicles;
 
@@ -467,12 +540,18 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                     children: [
                       Text(
                         FarmItemCatalog.nameFor(id),
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                       const Spacer(),
                       Text(
                         '$amount birim (${q.currentPrice} ÇK)',
-                        style: const TextStyle(color: Color(0xFF6B7A6A), fontSize: 12),
+                        style: const TextStyle(
+                          color: Color(0xFF6B7A6A),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -484,7 +563,8 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                         setState(() {
                           _selectedDispatchItemId = val;
                           final maxStock = session.warehouseAmountFor(val);
-                          final capacity = selectedVehicle?.effectiveCapacity ?? 0;
+                          final capacity =
+                              selectedVehicle?.effectiveCapacity ?? 0;
                           _dispatchAmount = _dispatchAmount
                               .clamp(1, max(1, min(maxStock, capacity)))
                               .toInt();
@@ -580,11 +660,15 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             },
             child: Card(
               margin: const EdgeInsets.only(bottom: 8),
-              color: vehicle.id == _selectedVehicleId ? const Color(0xFFEAF2E5) : Colors.white,
+              color: vehicle.id == _selectedVehicleId
+                  ? const Color(0xFFEAF2E5)
+                  : Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(
-                  color: vehicle.id == _selectedVehicleId ? _marketGreen : const Color(0xFFDEE5D6),
+                  color: vehicle.id == _selectedVehicleId
+                      ? _marketGreen
+                      : const Color(0xFFDEE5D6),
                   width: vehicle.id == _selectedVehicleId ? 2 : 1,
                 ),
               ),
@@ -597,7 +681,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                 ),
                 title: Text(
                   '${vehicle.truckType.name.toUpperCase()} (#${vehicle.id})',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
                 ),
                 subtitle: Text(
                   'Yakıt: %${vehicle.fuelLevel.toStringAsFixed(0)} · Aşınma: %${vehicle.wearPercent.toStringAsFixed(0)} · Durum: ${vehicle.status.name}',
@@ -607,7 +694,9 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   vehicle.id == _selectedVehicleId
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
-                  color: vehicle.id == _selectedVehicleId ? _marketGreen : Colors.grey,
+                  color: vehicle.id == _selectedVehicleId
+                      ? _marketGreen
+                      : Colors.grey,
                 ),
               ),
             ),
@@ -634,7 +723,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   ),
                   Text(
                     '${quote.currentPrice} ÇK',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -673,27 +765,58 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
             style: ElevatedButton.styleFrom(
               backgroundColor: _marketGreen,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               elevation: 2,
             ),
             icon: const Icon(Icons.send_rounded, color: _marketGold),
             label: const Text(
               'TIRI PAZARA GÖNDER',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              ),
             ),
-            onPressed: () {
+            onPressed: DebugActionController.instance.actionCallback(() {
               HapticFeedback.mediumImpact();
               final starterPlot = session.plotById(session.starterPlotId);
+              if (starterPlot == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Colors.redAccent,
+                    content: Text('Başlangıç tarlası bulunamadı.'),
+                  ),
+                );
+                return;
+              }
+              final roadPath = widget.findDrivableRoute?.call(
+                starterPlot.mapX,
+                starterPlot.mapY,
+                starterMarketMapX,
+                starterMarketMapY,
+              );
+              if (roadPath == null || roadPath.length < 2) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Colors.redAccent,
+                    content: Text(
+                      'Tarladan pazara geçilebilir bir yol bulunamadı.',
+                    ),
+                  ),
+                );
+                return;
+              }
               final hasResearchL01 = session.hasResearch('L01');
               final started = session.startStarterMarketRoute(
-                fieldX: starterPlot?.positionX.toDouble() ?? 0,
-                fieldY: starterPlot?.positionY.toDouble() ?? 0,
+                fieldX: starterPlot.mapX,
+                fieldY: starterPlot.mapY,
                 fieldName: 'Merkez Depo',
                 vehicleId: _selectedVehicleId,
                 productId: hasResearchL01 ? _selectedDispatchItemId : null,
-                amountPerTrip: hasResearchL01
-                    ? dispatchAmount
-                    : null,
+                amountPerTrip: hasResearchL01 ? dispatchAmount : null,
+                outboundRoadPath: roadPath,
               );
 
               if (started) {
@@ -719,7 +842,7 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                   ),
                 );
               }
-            },
+            }),
           ),
         ),
       ],
@@ -737,11 +860,19 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              Icon(Icons.assignment_outlined, size: 64, color: Color(0xFF9FB09B)),
+              Icon(
+                Icons.assignment_outlined,
+                size: 64,
+                color: Color(0xFF9FB09B),
+              ),
               SizedBox(height: 12),
               Text(
                 'Yeni Sözleşme Bekleniyor',
-                style: TextStyle(color: _marketInk, fontSize: 15, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  color: _marketInk,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               SizedBox(height: 6),
               Text(
@@ -770,8 +901,8 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
           color: isCompleted
               ? const Color(0xFFE8F5E9)
               : isAccepted
-                  ? const Color(0xFFFFF9C4)
-                  : Colors.white,
+              ? const Color(0xFFFFF9C4)
+              : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
@@ -787,21 +918,24 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: isCompleted
                             ? Colors.green
                             : isAccepted
-                                ? Colors.orange
-                                : _marketGreen,
+                            ? Colors.orange
+                            : _marketGreen,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         isCompleted
                             ? 'TAMAMLANDI'
                             : isAccepted
-                                ? 'AKTİF SÖZLEŞME'
-                                : 'TEKLİF',
+                            ? 'AKTİF SÖZLEŞME'
+                            : 'TEKLİF',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
@@ -832,7 +966,10 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                 const SizedBox(height: 4),
                 Text(
                   'Hedef: ${contract.targetAmount} birim · Teslim Edilen: ${contract.deliveredAmount} · Ambarda: $warehouseStock birim',
-                  style: const TextStyle(color: Color(0xFF6B7A6A), fontSize: 11),
+                  style: const TextStyle(
+                    color: Color(0xFF6B7A6A),
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
@@ -850,15 +987,23 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _marketGreen,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
                       ),
                       icon: const Icon(Icons.handshake_rounded, size: 16),
                       label: const Text(
                         'Sözleşmeyi Kabul Et',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
                       ),
-                      onPressed: () {
+                      onPressed: DebugActionController.instance.actionCallback(() {
                         HapticFeedback.lightImpact();
                         final ok = session.acceptDeliveryContract(contract.id);
                         if (ok) {
@@ -876,11 +1021,13 @@ class _MarketTradeSheetState extends State<MarketTradeSheet>
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               backgroundColor: Colors.redAccent,
-                              content: Text('Aynı anda yalnızca bir aktif sözleşme yönetebilirsiniz.'),
+                              content: Text(
+                                'Aynı anda yalnızca bir aktif sözleşme yönetebilirsiniz.',
+                              ),
                             ),
                           );
                         }
-                      },
+                      }),
                     ),
                   ),
               ],

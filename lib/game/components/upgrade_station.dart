@@ -1,16 +1,13 @@
+import 'dart:async';
 import 'dart:math';
+
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/debug_action_controller.dart';
 import '../domain/opening_session.dart';
 
-enum UpgradePadType {
-  capacity,
-  speed,
-  range,
-  miniMower,
-  worker,
-}
+enum UpgradePadType { capacity, speed, range, miniMower, worker }
 
 /// Interactive on-field arcade upgrade pad that players can walk into.
 class UpgradePadComponent extends PositionComponent {
@@ -20,11 +17,11 @@ class UpgradePadComponent extends PositionComponent {
     required this.session,
     required this.onPurchased,
   }) : super(
-          position: position,
-          size: Vector2(74, 52),
-          anchor: Anchor.center,
-          priority: 3,
-        );
+         position: position,
+         size: Vector2(74, 52),
+         anchor: Anchor.center,
+         priority: 3,
+       );
 
   final UpgradePadType type;
   final OpeningSession session;
@@ -32,6 +29,7 @@ class UpgradePadComponent extends PositionComponent {
 
   double _pulsePhase = 0.0;
   double _cooldown = 0.0;
+  bool _interactionPending = false;
 
   @override
   void update(double dt) {
@@ -88,34 +86,41 @@ class UpgradePadComponent extends PositionComponent {
   }
 
   void tryInteract(Vector2 playerPosition) {
-    if (_cooldown > 0 || session.stage == OpeningStage.management) return;
+    if (_cooldown > 0 ||
+        _interactionPending ||
+        session.stage == OpeningStage.management) {
+      return;
+    }
     if ((playerPosition - position).length <= 42.0) {
-      if (canAfford()) {
-        bool bought = false;
-        switch (type) {
-          case UpgradePadType.capacity:
-            bought = session.buyUpgradeCapacity();
-            break;
-          case UpgradePadType.speed:
-            bought = session.buyUpgradeSpeed();
-            break;
-          case UpgradePadType.range:
-            bought = session.buyUpgradeRange();
-            break;
-          case UpgradePadType.miniMower:
-            bought = session.buyMower();
-            break;
-          case UpgradePadType.worker:
-            bought = session.hireWorker();
-            break;
-        }
-
-        if (bought) {
-          _cooldown = 0.5;
-          onPurchased(type, position.clone());
-        }
+      if (!canAfford()) return;
+      if (DebugActionController.instance.debugModeEnabled) {
+        _interactionPending = true;
+        _cooldown = DebugActionController.actionDelay.inSeconds + 0.1;
+        unawaited(
+          DebugActionController.instance
+              .runPlayerAction<void>(_purchaseUpgrade)
+              .whenComplete(() => _interactionPending = false),
+        );
+      } else {
+        _purchaseUpgrade();
       }
     }
+  }
+
+  void _purchaseUpgrade() {
+    if (session.stage == OpeningStage.management || !canAfford()) return;
+
+    final bought = switch (type) {
+      UpgradePadType.capacity => session.buyUpgradeCapacity(),
+      UpgradePadType.speed => session.buyUpgradeSpeed(),
+      UpgradePadType.range => session.buyUpgradeRange(),
+      UpgradePadType.miniMower => session.buyMower(),
+      UpgradePadType.worker => session.hireWorker(),
+    };
+    if (!bought) return;
+
+    _cooldown = 0.5;
+    onPurchased(type, position.clone());
   }
 
   @override

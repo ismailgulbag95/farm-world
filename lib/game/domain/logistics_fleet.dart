@@ -226,6 +226,24 @@ class RouteStop {
   );
 }
 
+/// A point on a saved vehicle route, in world-space metres.
+class RouteWaypoint {
+  const RouteWaypoint(this.x, this.y);
+
+  final double x;
+  final double y;
+
+  double distanceTo(RouteWaypoint other) =>
+      sqrt(pow(other.x - x, 2) + pow(other.y - y, 2));
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y};
+
+  factory RouteWaypoint.fromJson(Map<String, dynamic> json) => RouteWaypoint(
+    (json['x'] as num).toDouble(),
+    (json['y'] as num).toDouble(),
+  );
+}
+
 /// Multi-stop looping route for logistics transport.
 class TransportRoute {
   const TransportRoute({
@@ -236,6 +254,7 @@ class TransportRoute {
     this.isActive = true,
     this.isOneShot = false,
     this.contractId,
+    this.legPaths = const [],
   });
 
   final String id;
@@ -246,20 +265,97 @@ class TransportRoute {
   final bool isOneShot;
   final String? contractId;
 
+  /// Saved road-centerline points for each stop-to-next-stop leg.
+  ///
+  /// Older saves omit this data; their routes retain a direct-line fallback
+  /// until they are rebuilt against the current world road graph.
+  final List<List<RouteWaypoint>> legPaths;
+
   int nextStopIndex(int currentIndex) {
     if (stops.isEmpty) return 0;
     return (currentIndex + 1) % stops.length;
   }
 
+  bool get hasRoadGeometry =>
+      stops.length > 1 &&
+      legPaths.length == stops.length &&
+      legPaths.every((path) => path.length >= 2);
+
+  /// Returns a leg's stored road geometry, or a legacy direct path if an old
+  /// save has not been migrated yet.
+  List<RouteWaypoint> pathForLeg(int legIndex) {
+    if (stops.isEmpty) return const [];
+    final index = legIndex.clamp(0, stops.length - 1).toInt();
+    if (legPaths.length == stops.length && legPaths[index].length >= 2) {
+      return legPaths[index];
+    }
+    final start = stops[index];
+    final end = stops[nextStopIndex(index)];
+    return [
+      RouteWaypoint(start.positionX, start.positionY),
+      RouteWaypoint(end.positionX, end.positionY),
+    ];
+  }
+
+  double distanceForLeg(int legIndex) {
+    final points = pathForLeg(legIndex);
+    var distance = 0.0;
+    for (var i = 0; i < points.length - 1; i++) {
+      distance += points[i].distanceTo(points[i + 1]);
+    }
+    return distance;
+  }
+
+  RouteWaypoint positionAlongLeg(int legIndex, double progress) {
+    final points = pathForLeg(legIndex);
+    if (points.isEmpty) return const RouteWaypoint(0, 0);
+    if (points.length == 1) return points.single;
+    final totalDistance = distanceForLeg(legIndex);
+    if (totalDistance <= 0.001) return points.first;
+
+    var remaining = totalDistance * progress.clamp(0.0, 1.0).toDouble();
+    for (var i = 0; i < points.length - 1; i++) {
+      final start = points[i];
+      final end = points[i + 1];
+      final segmentDistance = start.distanceTo(end);
+      if (segmentDistance <= 0.001) continue;
+      if (remaining <= segmentDistance || i == points.length - 2) {
+        final t = (remaining / segmentDistance).clamp(0.0, 1.0).toDouble();
+        return RouteWaypoint(
+          start.x + (end.x - start.x) * t,
+          start.y + (end.y - start.y) * t,
+        );
+      }
+      remaining -= segmentDistance;
+    }
+    return points.last;
+  }
+
+  double headingAlongLeg(int legIndex, double progress) {
+    final points = pathForLeg(legIndex);
+    if (points.length < 2) return 0;
+    final totalDistance = distanceForLeg(legIndex);
+    var remaining = totalDistance * progress.clamp(0.0, 1.0).toDouble();
+    for (var i = 0; i < points.length - 1; i++) {
+      final start = points[i];
+      final end = points[i + 1];
+      final segmentDistance = start.distanceTo(end);
+      if (segmentDistance <= 0.001) continue;
+      if (remaining <= segmentDistance || i == points.length - 2) {
+        return atan2(end.y - start.y, end.x - start.x);
+      }
+      remaining -= segmentDistance;
+    }
+    final start = points[points.length - 2];
+    final end = points.last;
+    return atan2(end.y - start.y, end.x - start.x);
+  }
+
   double totalDistance() {
     if (stops.length < 2) return 0.0;
-    double total = 0.0;
-    for (int i = 0; i < stops.length; i++) {
-      final current = stops[i];
-      final next = stops[(i + 1) % stops.length];
-      final dx = next.positionX - current.positionX;
-      final dy = next.positionY - current.positionY;
-      total += sqrt(dx * dx + dy * dy);
+    var total = 0.0;
+    for (var i = 0; i < stops.length; i++) {
+      total += distanceForLeg(i);
     }
     return total;
   }
@@ -272,7 +368,9 @@ class TransportRoute {
     bool? isActive,
     bool? isOneShot,
     String? contractId,
+    List<List<RouteWaypoint>>? legPaths,
     bool clearContractId = false,
+    bool clearLegPaths = false,
   }) {
     return TransportRoute(
       id: id ?? this.id,
@@ -282,6 +380,7 @@ class TransportRoute {
       isActive: isActive ?? this.isActive,
       isOneShot: isOneShot ?? this.isOneShot,
       contractId: clearContractId ? null : contractId ?? this.contractId,
+      legPaths: clearLegPaths ? const [] : legPaths ?? this.legPaths,
     );
   }
 
@@ -293,6 +392,10 @@ class TransportRoute {
     'isActive': isActive,
     'isOneShot': isOneShot,
     if (contractId != null) 'contractId': contractId,
+    if (legPaths.isNotEmpty)
+      'legPaths': legPaths
+          .map((path) => path.map((point) => point.toJson()).toList())
+          .toList(),
   };
 
   factory TransportRoute.fromJson(Map<String, dynamic> json) => TransportRoute(
@@ -307,6 +410,16 @@ class TransportRoute {
     isActive: json['isActive'] as bool? ?? true,
     isOneShot: json['isOneShot'] as bool? ?? false,
     contractId: json['contractId'] as String?,
+    legPaths: (json['legPaths'] as List<dynamic>? ?? const [])
+        .map(
+          (path) => (path as List<dynamic>)
+              .map(
+                (point) =>
+                    RouteWaypoint.fromJson(point as Map<String, dynamic>),
+              )
+              .toList(growable: false),
+        )
+        .toList(growable: false),
   );
 }
 
@@ -777,6 +890,7 @@ class LogisticsFleetManager {
     bool isOneShot = true,
     String? contractId,
     String? vehicleId,
+    List<RouteWaypoint>? outboundRoadPath,
   }) {
     initializeStarterFleet();
     final defaultVehicleIndex = vehicleId == null
@@ -796,6 +910,9 @@ class LogisticsFleetManager {
     final routeId = selectedVehicle.truckType == TruckType.starter
         ? 'route_starter'
         : 'route_market_${selectedVehicle.id}';
+    final routePath =
+        outboundRoadPath ??
+        [RouteWaypoint(fieldX, fieldY), RouteWaypoint(marketX, marketY)];
     final route = TransportRoute(
       id: routeId,
       name: 'Tarladan Pazara Satış Hattı',
@@ -818,6 +935,10 @@ class LogisticsFleetManager {
           stopType: StopType.market,
           action: CargoAction.unload,
         ),
+      ],
+      legPaths: [
+        List.unmodifiable(routePath),
+        List.unmodifiable(routePath.reversed),
       ],
       isOneShot: isOneShot,
       contractId: contractId,
@@ -978,16 +1099,16 @@ class LogisticsFleetManager {
       final routeIndex = routes.indexWhere((r) => r.id == v.assignedRouteId);
       if (routeIndex == -1) continue;
       final route = routes[routeIndex];
-      if (!route.isActive || route.stops.length < 2) continue;
+      if (!route.isActive || !route.hasRoadGeometry) continue;
 
-      final currentStop = route.stops[v.currentStopIndex];
-      final nextStopIndex = route.nextStopIndex(v.currentStopIndex);
+      final currentStopIndex = v.currentStopIndex
+          .clamp(0, route.stops.length - 1)
+          .toInt();
+      final nextStopIndex = route.nextStopIndex(currentStopIndex);
       final nextStop = route.stops[nextStopIndex];
 
-      // Distance between stops
-      final dx = nextStop.positionX - currentStop.positionX;
-      final dy = nextStop.positionY - currentStop.positionY;
-      final dist = sqrt(dx * dx + dy * dy);
+      // Route progress and fuel use the saved road-centerline distance.
+      final dist = route.distanceForLeg(currentStopIndex);
 
       if (dist <= 0.001) {
         v = v.copyWith(currentStopIndex: nextStopIndex);

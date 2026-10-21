@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 
 import '../domain/crop_plot.dart';
+import '../domain/debug_action_controller.dart';
 import '../domain/opening_crop_catalog.dart';
 import '../domain/opening_session.dart';
 import '../farm_world_artwork.dart';
@@ -11,8 +14,7 @@ import 'floating_text.dart';
 
 /// Renders a crop plot on the management map, supporting purchasing,
 /// growth visualization, and direct interactive tapping.
-class InteractiveCropPlotComponent extends PositionComponent
-    with TapCallbacks {
+class InteractiveCropPlotComponent extends PositionComponent with TapCallbacks {
   InteractiveCropPlotComponent({
     required this.plotId,
     required Vector2 position,
@@ -37,46 +39,50 @@ class InteractiveCropPlotComponent extends PositionComponent
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5;
 
-  CropPlotState get plot =>
-      session.plots.firstWhere((p) => p.id == plotId, orElse: () => session.plots.first);
+  CropPlotState get plot => session.plots.firstWhere(
+    (p) => p.id == plotId,
+    orElse: () => session.plots.first,
+  );
 
   @override
   void onTapDown(TapDownEvent event) {
     if (session.stage != OpeningStage.management) return;
 
-    if (!plot.isOwned) {
-      if (session.canBuyPlot(plotId)) {
-        if (session.buyPlot(plotId)) {
-          parent?.add(
-            FloatingTextComponent(
-              position: position + Vector2(size.x / 2, size.y / 2),
-              text: '🌾 YENİ TARLA AÇILDI!',
-              color: const Color(0xFF81C784),
-            ),
-          );
+    unawaited(
+      DebugActionController.instance.runPlayerAction<void>(() {
+        if (!plot.isOwned) {
+          if (session.canBuyPlot(plotId) && session.buyPlot(plotId)) {
+            parent?.add(
+              FloatingTextComponent(
+                position: position + Vector2(size.x / 2, size.y / 2),
+                text: '🌾 YENİ TARLA AÇILDI!',
+                color: const Color(0xFF81C784),
+              ),
+            );
+          }
+          return;
         }
-      }
-      return;
-    }
 
-    selectedMapItem.value = ManagementMapSelection.starterPlot;
+        selectedMapItem.value = ManagementMapSelection.starterPlot;
 
-    final now = DateTime.now();
-    final anchor = session.firstSuccessfulPlantingAt;
-    if (anchor != null && plot.hasActiveCrop) {
-      final snapshot = plot.cropSnapshotAt(now, anchor);
-      if (snapshot != null && snapshot.isHarvestable) {
-        if (session.harvestCropOnPlot(plotId, now)) {
-          parent?.add(
-            FloatingTextComponent(
-              position: position + Vector2(size.x / 2, size.y / 2),
-              text: '+${snapshot.harvestYield.round()} ÇK',
-              color: const Color(0xFFFFD54F),
-            ),
-          );
+        final now = DateTime.now();
+        final anchor = session.firstSuccessfulPlantingAt;
+        if (anchor != null && plot.hasActiveCrop) {
+          final snapshot = plot.cropSnapshotAt(now, anchor);
+          if (snapshot != null && snapshot.isHarvestable) {
+            if (session.harvestCropOnPlot(plotId, now)) {
+              parent?.add(
+                FloatingTextComponent(
+                  position: position + Vector2(size.x / 2, size.y / 2),
+                  text: '+${snapshot.harvestYield.round()} ÇK',
+                  color: const Color(0xFFFFD54F),
+                ),
+              );
+            }
+          }
         }
-      }
-    }
+      }),
+    );
   }
 
   @override

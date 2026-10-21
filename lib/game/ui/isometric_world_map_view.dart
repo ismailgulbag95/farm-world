@@ -8,6 +8,9 @@ import 'package:three_js/three_js.dart' as three;
 
 import '../domain/procedural_farm_world.dart';
 
+const double isometricWorldMapMinZoom = 0.12;
+const double isometricWorldMapMaxZoom = 1.85;
+
 /// The camera uses the same world-space center and zoom scale as the 2D map.
 /// The isometric yaw and pitch stay fixed so the map remains easy to navigate.
 @immutable
@@ -46,18 +49,70 @@ Offset projectMapPointToScreen(
   );
 }
 
-/// Keeps parent overlays and the ThreeJS camera on the same world-space pose.
+/// Keeps the viewport and overlays within the finite rendered world. If the
+/// viewport is larger than the world at this zoom, centers it on the world.
 MapCameraPose clampIsometricCameraPose(MapCameraPose pose, Size viewport) {
-  final zoom = pose.zoom.clamp(0.12, 1.85).toDouble();
+  final zoom = pose.zoom
+      .clamp(isometricWorldMapMinZoom, isometricWorldMapMaxZoom)
+      .toDouble();
   final world = ProceduralFarmWorld.worldBounds;
-  final minX = world.left - 600.0;
-  final maxX = world.right + 600.0;
-  final minY = world.top - 600.0;
-  final maxY = world.bottom + 600.0;
-  final centerX = pose.center.x.clamp(minX, maxX).toDouble();
-  final centerY = pose.center.y.clamp(minY, maxY).toDouble();
-  return MapCameraPose(center: WorldMapPoint(centerX, centerY), zoom: zoom);
+  if (viewport.isEmpty) {
+    return MapCameraPose(
+      center: WorldMapPoint(
+        pose.center.x.clamp(world.left, world.right).toDouble(),
+        pose.center.y.clamp(world.top, world.bottom).toDouble(),
+      ),
+      zoom: zoom,
+    );
+  }
+
+  final projectedWorld = _projectedWorldBoundsAtOrigin(world, zoom);
+  final projectedCenter = _projectWorldPointAtOrigin(pose.center, zoom);
+  final minCenterX = projectedWorld.left + viewport.width / 2;
+  final maxCenterX = projectedWorld.right - viewport.width / 2;
+  final minCenterY = projectedWorld.top + viewport.height / 2;
+  final maxCenterY = projectedWorld.bottom - viewport.height / 2;
+  final centerX = minCenterX <= maxCenterX
+      ? projectedCenter.dx.clamp(minCenterX, maxCenterX).toDouble()
+      : (projectedWorld.left + projectedWorld.right) / 2;
+  final centerY = minCenterY <= maxCenterY
+      ? projectedCenter.dy.clamp(minCenterY, maxCenterY).toDouble()
+      : (projectedWorld.top + projectedWorld.bottom) / 2;
+  final worldCenter = _projectedWorldDeltaForScreen(
+    Offset(viewport.width / 2 + centerX, viewport.height / 2 + centerY),
+    viewport,
+    zoom,
+  );
+  return MapCameraPose(center: worldCenter, zoom: zoom);
 }
+
+Rect _projectedWorldBoundsAtOrigin(Rect world, double zoom) {
+  var minX = double.infinity;
+  var maxX = double.negativeInfinity;
+  var minY = double.infinity;
+  var maxY = double.negativeInfinity;
+  final scaleX = zoom * math.sqrt(0.5);
+  final scaleY = zoom * 0.5;
+  for (final point in [
+    Offset(world.left, world.top),
+    Offset(world.right, world.top),
+    Offset(world.left, world.bottom),
+    Offset(world.right, world.bottom),
+  ]) {
+    final x = (point.dx - point.dy) * scaleX;
+    final y = (point.dx + point.dy) * scaleY;
+    minX = math.min(minX, x);
+    maxX = math.max(maxX, x);
+    minY = math.min(minY, y);
+    maxY = math.max(maxY, y);
+  }
+  return Rect.fromLTRB(minX, minY, maxX, maxY);
+}
+
+Offset _projectWorldPointAtOrigin(WorldMapPoint point, double zoom) => Offset(
+  (point.x - point.y) * zoom * math.sqrt(0.5),
+  (point.x + point.y) * zoom * 0.5,
+);
 
 Rect _projectedWorldBoundsForPose(MapCameraPose pose, Size viewport) {
   if (viewport.isEmpty) {
@@ -90,6 +145,9 @@ Rect _projectedWorldBoundsForPose(MapCameraPose pose, Size viewport) {
     pose.center.y + maxY,
   );
 }
+
+Rect visibleWorldBoundsForPose(MapCameraPose pose, Size viewport) =>
+    _projectedWorldBoundsForPose(pose, viewport);
 
 WorldMapPoint _projectedWorldDeltaForScreen(
   Offset screenPoint,
@@ -207,8 +265,8 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   );
 
   static const _groundHeight = 0.0;
-  static const _minZoom = 0.1;
-  static const _maxZoom = 1.85;
+  static const _minZoom = isometricWorldMapMinZoom;
+  static const _maxZoom = isometricWorldMapMaxZoom;
   static const _chunkPadding = 0;
 
   late MapCameraPose _pose = widget.cameraPose ?? _defaultPose;
@@ -269,18 +327,14 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   three.SphereGeometry? _markerSphereGeometry;
-  three.PlaneGeometry? _landmarkPlaneGeometry;
   three.SphereGeometry? _treeCanopyGeometry;
   three.CylinderGeometry? _treeTrunkGeometry;
   three.SphereGeometry? _mountainGeometry;
   three.Texture? _fieldAtlas;
-  three.Texture? _landmarkAtlas;
   final Map<IsometricFieldState, three.Texture> _fieldTextures = {};
-  final List<three.Texture> _landmarkTextures = [];
   final Map<IsometricFieldState, three.Material> _fieldMaterials = {};
   final Map<String, three.Texture> _matureCropTextures = {};
   final Map<String, three.Material> _matureCropMaterials = {};
-  final Map<int, three.Material> _landmarkMaterials = {};
   final Map<String, three.Material> _infrastructureMaterials = {};
   final Map<IsometricMarkerKind, three.Material> _markerMaterials = {};
   final Map<int, three.Material> _pathMaterials = {};
@@ -303,9 +357,14 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   DateTime? _lastCameraNotification;
   Size _lastClampedLayoutSize = Size.zero;
   bool _sceneReady = false;
+  bool _parcelLayerReady = false;
+  bool _mapGestureActive = false;
+  int _terrainBuildRevision = 0;
+  int _parcelBuildRevision = 0;
   Timer? _rebuildDebounceTimer;
   three.BoxGeometry _getBoxGeometry(double width, double height, double depth) {
-    final key = 'b_${width.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_${depth.toStringAsFixed(1)}';
+    final key =
+        'b_${width.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_${depth.toStringAsFixed(1)}';
     return _sharedGeometryCache.putIfAbsent(
       key,
       () => three.BoxGeometry(width, height, depth),
@@ -318,10 +377,16 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     double height,
     int radialSegments,
   ) {
-    final key = 'c_${radiusTop.toStringAsFixed(1)}_${radiusBottom.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_$radialSegments';
+    final key =
+        'c_${radiusTop.toStringAsFixed(1)}_${radiusBottom.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_$radialSegments';
     return _sharedGeometryCache.putIfAbsent(
       key,
-      () => three.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments),
+      () => three.CylinderGeometry(
+        radiusTop,
+        radiusBottom,
+        height,
+        radialSegments,
+      ),
     ) as three.CylinderGeometry;
   }
 
@@ -330,19 +395,40 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     double height,
     int radialSegments,
   ) {
-    final key = 'cn_${radius.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_$radialSegments';
+    final key =
+        'cn_${radius.toStringAsFixed(1)}_${height.toStringAsFixed(1)}_$radialSegments';
     return _sharedGeometryCache.putIfAbsent(
       key,
       () => three.ConeGeometry(radius, height, radialSegments),
     ) as three.ConeGeometry;
   }
 
+  three.SphereGeometry _getSphereGeometry(
+    double radius,
+    int widthSegments,
+    int heightSegments,
+  ) {
+    final key =
+        's_${radius.toStringAsFixed(1)}_${widthSegments}_$heightSegments';
+    return _sharedGeometryCache.putIfAbsent(
+      key,
+      () => three.SphereGeometry(radius, widthSegments, heightSegments),
+    ) as three.SphereGeometry;
+  }
+
   final List<three.Object3D> _animatedWindmillRotors = [];
+  final List<three.Object3D> _animatedMarketFlags = [];
+  int _animationFrame = 0;
 
   void _onRenderFrame() {
-    if (_animatedWindmillRotors.isEmpty) return;
+    if (_animatedWindmillRotors.isEmpty && _animatedMarketFlags.isEmpty) return;
     for (var i = 0; i < _animatedWindmillRotors.length; i++) {
       _animatedWindmillRotors[i].rotation.z += 0.024;
+    }
+    _animationFrame++;
+    final breeze = math.sin(_animationFrame * 0.045) * 0.12;
+    for (final flag in _animatedMarketFlags) {
+      flag.rotation.z = breeze;
     }
   }
 
@@ -353,7 +439,15 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       setup: _setupScene,
       rendererUpdate: _onRenderFrame,
       onSetupComplete: () {
-        if (mounted) setState(() => _sceneReady = true);
+        if (!mounted) return;
+        setState(() => _sceneReady = true);
+        // The first terrain build can finish before ThreeJS reports setup
+        // complete. In that case its parcel-layer request is intentionally
+        // skipped, so schedule it again now that the scene can accept objects.
+        final builtBounds = _lastBuiltBounds;
+        if (!_parcelLayerReady && builtBounds != null) {
+          _rebuildParcelLayer(builtBounds);
+        }
       },
       settings: three.Settings(
         antialias: false,
@@ -383,7 +477,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     _threeJs.scene = _scene;
     _raycaster = three.Raycaster();
     _markerSphereGeometry = three.SphereGeometry(1, 8, 6);
-    _landmarkPlaneGeometry = three.PlaneGeometry(1, 1);
     _treeCanopyGeometry = three.SphereGeometry(1, 6, 4);
     _treeTrunkGeometry = three.CylinderGeometry(0.12, 0.18, 1, 5);
     _mountainGeometry = three.SphereGeometry(1, 7, 5);
@@ -430,7 +523,10 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       _threeJs.height > 10 ? _threeJs.height : 900.0,
     );
     _applyPose(_pose, rebuild: true, viewport: initialViewport);
-    final visibleBounds = _visibleWorldBoundsFor(_pose, viewport: initialViewport);
+    final visibleBounds = _visibleWorldBoundsFor(
+      _pose,
+      viewport: initialViewport,
+    );
     _syncMarkerLayer(visibleBounds);
     _syncPathLayer(visibleBounds);
     _syncSelectionLayer();
@@ -450,17 +546,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         'side': three.DoubleSide,
       });
     }
-
-    const landmarkColors = [0xffba6f49, 0xffbe9659, 0xff4096a6, 0xff609a5b];
-    for (var i = 0; i < 4; i++) {
-      _landmarkMaterials[i] = three.MeshLambertMaterial.fromMap({
-        'color': landmarkColors[i],
-        'transparent': true,
-        'alphaTest': 0.04,
-        'depthWrite': false,
-        'side': three.DoubleSide,
-      });
-    }
   }
 
   Future<void> _loadTexturesInBackground() async {
@@ -470,22 +555,10 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       );
       if (_fieldAtlas != null && mounted) {
         _createFieldTextures();
-        if (_sceneReady) _rebuildVisibleMap(force: true);
+        if (_sceneReady) _debounceRebuild();
       }
     } on Object {
       // Fallback colors already active.
-    }
-
-    try {
-      _landmarkAtlas = await three.TextureLoader().fromAsset(
-        'assets/images/map/farm-world-map-landmarks-v1.png',
-      );
-      if (_landmarkAtlas != null && mounted) {
-        _createLandmarkMaterials();
-        if (_sceneReady) _rebuildVisibleMap(force: true);
-      }
-    } on Object {
-      // Fallback procedural landmarks remain visible.
     }
 
     for (final entry in const {
@@ -534,27 +607,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     }
   }
 
-  void _createLandmarkMaterials() {
-    final atlas = _landmarkAtlas;
-    if (atlas == null) return;
-    for (var cell = 0; cell < 4; cell++) {
-      final texture = atlas.clone();
-      texture
-        ..repeat.setValues(0.5, 0.5)
-        ..offset.setValues((cell % 2) * 0.5, cell < 2 ? 0.5 : 0.0)
-        ..needsUpdate = true;
-      _landmarkTextures.add(texture);
-      _landmarkMaterials[cell]?.dispose();
-      _landmarkMaterials[cell] = three.MeshLambertMaterial.fromMap({
-        'map': texture,
-        'transparent': true,
-        'alphaTest': 0.04,
-        'depthWrite': false,
-        'side': three.DoubleSide,
-      });
-    }
-  }
-
   @override
   void didUpdateWidget(covariant IsometricWorldMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -589,7 +641,7 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     } else if (parcelsChanged) {
       _rebuildParcelLayer();
     } else if (cameraChanged) {
-      _rebuildVisibleMap();
+      _debounceRebuild();
     }
 
     if (oldWidget.selectedParcelId != widget.selectedParcelId) {
@@ -620,14 +672,7 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     if (selectedId == null) return;
     final parcel = widget.world.parcelById(selectedId, searchRadius: 2);
     if (parcel == null) return;
-    root.add(
-      _outlineMesh(
-        parcel.worldVertices,
-        0xffffe08a,
-        5.2,
-        3.2,
-      ),
-    );
+    root.add(_outlineMesh(parcel.worldVertices, 0xffffe08a, 5.2, 3.2));
   }
 
   bool _sameMarkers(List<IsometricMapMarker> a, List<IsometricMapMarker> b) {
@@ -679,11 +724,7 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     for (final texture in _matureCropTextures.values) {
       texture.dispose();
     }
-    for (final texture in _landmarkTextures) {
-      texture.dispose();
-    }
     _fieldAtlas?.dispose();
-    _landmarkAtlas?.dispose();
     for (final material in _fieldMaterials.values) {
       material.dispose();
     }
@@ -699,9 +740,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     for (final material in _matureCropMaterials.values) {
       material.dispose();
     }
-    for (final material in _landmarkMaterials.values) {
-      material.dispose();
-    }
     for (final material in _infrastructureMaterials.values) {
       material.dispose();
     }
@@ -714,8 +752,9 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     for (final mesh in _pathMeshes.values) {
       mesh.geometry?.dispose();
     }
+    _animatedWindmillRotors.clear();
+    _animatedMarketFlags.clear();
     _markerSphereGeometry?.dispose();
-    _landmarkPlaneGeometry?.dispose();
     _treeCanopyGeometry?.dispose();
     _treeTrunkGeometry?.dispose();
     _mountainGeometry?.dispose();
@@ -762,7 +801,14 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _threeJs.build(),
+              // ThreeJS.build() wraps its renderer in a Peripherals widget
+              // with its own ScaleGestureRecognizer. That child recognizer
+              // wins Flutter's gesture arena before this map's recognizer,
+              // so one-finger drags never reach the camera handlers below.
+              // The map performs its own tap hit-testing and camera gestures;
+              // keep the renderer visible while removing that competing hit
+              // target.
+              IgnorePointer(child: _threeJs.build()),
               if (!_sceneReady)
                 const ColoredBox(
                   color: Color(0xff3b5c3d),
@@ -787,15 +833,27 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent && _sceneReady) {
       final zoomFactor = event.scrollDelta.dy < 0 ? 1.15 : 0.87;
-      final newZoom = (_pose.zoom * zoomFactor).clamp(_minZoom, _maxZoom).toDouble();
-      final viewport = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+      final newZoom = (_pose.zoom * zoomFactor)
+          .clamp(_minZoom, _maxZoom)
+          .toDouble();
+      final viewport = _lastClampedLayoutSize.isEmpty
+          ? _viewportSize
+          : _lastClampedLayoutSize;
       if (viewport.isEmpty) return;
       final focal = event.localPosition;
       final anchor = _worldPointAt(focal);
       final nextCenter = anchor == null
           ? _pose.center
-          : _centerKeepingWorldPointAtScreenPoint(anchor, focal, viewport, newZoom);
-      _pose = _clampCameraPose(MapCameraPose(center: nextCenter, zoom: newZoom), viewport: viewport);
+          : _centerKeepingWorldPointAtScreenPoint(
+              anchor,
+              focal,
+              viewport,
+              newZoom,
+            );
+      _pose = _clampCameraPose(
+        MapCameraPose(center: nextCenter, zoom: newZoom),
+        viewport: viewport,
+      );
       _setCameraPose(_pose);
       _notifyCameraChanged();
       _debounceRebuild();
@@ -803,10 +861,16 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   void _debounceRebuild() {
+    // Cancel any in-flight chunk preparation; its result may target an older
+    // camera pose or world configuration.
+    _terrainBuildRevision++;
+    _parcelBuildRevision++;
     _rebuildDebounceTimer?.cancel();
     _rebuildDebounceTimer = Timer(const Duration(milliseconds: 200), () {
-      if (!mounted || !_sceneReady) return;
-      final viewport = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+      if (!mounted || !_sceneReady || _mapGestureActive) return;
+      final viewport = _lastClampedLayoutSize.isEmpty
+          ? _viewportSize
+          : _lastClampedLayoutSize;
       final visibleBounds = _visibleWorldBoundsFor(_pose, viewport: viewport);
       _rebuildVisibleMap();
       _syncMarkerLayer(visibleBounds);
@@ -815,8 +879,14 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   void _onScaleStart(ScaleStartDetails details) {
+    if (!_sceneReady) return;
+    _mapGestureActive = true;
+    _terrainBuildRevision++;
+    _parcelBuildRevision++;
     _rebuildDebounceTimer?.cancel();
-    final viewport = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+    final viewport = _lastClampedLayoutSize.isEmpty
+        ? _viewportSize
+        : _lastClampedLayoutSize;
     if (viewport.isEmpty) return;
     _gestureAnchorWorld = _worldPointAt(details.localFocalPoint);
     _gestureStartPose = _pose;
@@ -829,23 +899,25 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final zoom = (_gestureStartPose.zoom * details.scale)
         .clamp(_minZoom, _maxZoom)
         .toDouble();
-    final viewport = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+    final viewport = _lastClampedLayoutSize.isEmpty
+        ? _viewportSize
+        : _lastClampedLayoutSize;
     if (viewport.isEmpty) return;
     final nextCenter = anchor == null
         ? _gestureStartPose.center
         : _centerKeepingWorldPointAtScreenPoint(anchor, focal, viewport, zoom);
-    _pose = _clampCameraPose(MapCameraPose(center: nextCenter, zoom: zoom), viewport: viewport);
+    _pose = _clampCameraPose(
+      MapCameraPose(center: nextCenter, zoom: zoom),
+      viewport: viewport,
+    );
     _setCameraPose(_pose);
     _notifyCameraChanged();
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
+    _mapGestureActive = false;
     _gestureAnchorWorld = null;
-    final viewport = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
-    final visibleBounds = _visibleWorldBoundsFor(_pose, viewport: viewport);
-    _rebuildVisibleMap();
-    _syncMarkerLayer(visibleBounds);
-    _syncPathLayer(visibleBounds);
+    _debounceRebuild();
     _notifyCameraChanged(force: true);
   }
 
@@ -878,7 +950,28 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   Rect _visibleWorldBoundsFor(MapCameraPose pose, {Size? viewport}) {
-    return _projectedWorldBoundsForPose(pose, viewport ?? (_lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize));
+    final projectedBounds = _projectedWorldBoundsForPose(
+      pose,
+      viewport ??
+          (_lastClampedLayoutSize.isEmpty
+              ? _viewportSize
+              : _lastClampedLayoutSize),
+    );
+    final world = ProceduralFarmWorld.worldBounds;
+    final left = projectedBounds.left.clamp(world.left, world.right).toDouble();
+    final top = projectedBounds.top.clamp(world.top, world.bottom).toDouble();
+    final right = projectedBounds.right
+        .clamp(world.left, world.right)
+        .toDouble();
+    final bottom = projectedBounds.bottom
+        .clamp(world.top, world.bottom)
+        .toDouble();
+    return Rect.fromLTRB(
+      left,
+      top,
+      math.max(left, right),
+      math.max(top, bottom),
+    );
   }
 
   void _updateCameraFrustum(Size size) {
@@ -907,7 +1000,13 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   MapCameraPose _clampCameraPose(MapCameraPose pose, {Size? viewport}) =>
-      clampIsometricCameraPose(pose, viewport ?? (_lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize));
+      clampIsometricCameraPose(
+        pose,
+        viewport ??
+            (_lastClampedLayoutSize.isEmpty
+                ? _viewportSize
+                : _lastClampedLayoutSize),
+      );
 
   void _ensureDynamicRoots() {
     _markerRoot ??= three.Group();
@@ -916,18 +1015,7 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     if (!_scene.children.contains(_pathRoot)) _scene.add(_pathRoot!);
   }
 
-  int? _landmarkCellForMarker(IsometricMarkerKind kind) => switch (kind) {
-    IsometricMarkerKind.market || IsometricMarkerKind.order => 2,
-    IsometricMarkerKind.farm => 3,
-    IsometricMarkerKind.player ||
-    IsometricMarkerKind.vehicle ||
-    IsometricMarkerKind.poi => null,
-  };
-
   three.Material _markerMaterialFor(IsometricMarkerKind kind) {
-    final cell = _landmarkCellForMarker(kind);
-    final landmarkMaterial = cell == null ? null : _landmarkMaterials[cell];
-    if (landmarkMaterial != null) return landmarkMaterial;
     return _markerMaterials.putIfAbsent(kind, () {
       final color = switch (kind) {
         IsometricMarkerKind.player => 0xff42a9ca,
@@ -955,21 +1043,27 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
           marker.id: marker,
     };
 
-    for (final id in _markerMeshes.keys.toList()) {
+    for (final id in _visibleMarkers.keys.toList()) {
       if (visible.containsKey(id)) continue;
-      root.remove(_markerMeshes.remove(id)!);
+      final mesh = _markerMeshes.remove(id);
+      if (mesh != null) root.remove(mesh);
       _visibleMarkers.remove(id);
     }
 
     for (final entry in visible.entries) {
       final marker = entry.value;
       if (marker.id.startsWith('settlement:')) continue;
-      final atlasCell = _landmarkCellForMarker(marker.kind);
-      final landmark =
-          atlasCell != null && _landmarkMaterials.containsKey(atlasCell);
-      final geometry = landmark
-          ? _landmarkPlaneGeometry
-          : _markerSphereGeometry;
+      if (marker.kind == IsometricMarkerKind.farm ||
+          marker.kind == IsometricMarkerKind.market ||
+          marker.kind == IsometricMarkerKind.order) {
+        // Farm and market landmarks are modeled in the terrain scene below;
+        // retain their screen-space hit target for selection and labels.
+        final mesh = _markerMeshes.remove(entry.key);
+        if (mesh != null) root.remove(mesh);
+        _visibleMarkers[entry.key] = marker;
+        continue;
+      }
+      final geometry = _markerSphereGeometry;
       if (geometry == null) continue;
       var mesh = _markerMeshes[entry.key];
       if (mesh == null) {
@@ -982,18 +1076,15 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         if (!identical(mesh.material, material)) mesh.material = material;
       }
 
-      final markerSize = landmark
-          ? (marker.size * 3.1).clamp(88.0, 176.0).toDouble()
-          : marker.size * 0.43;
+      final markerSize = marker.size * 0.43;
       mesh
         ..position.setValues(
           marker.position.x,
-          landmark ? markerSize * 0.49 : marker.size * 0.65,
+          marker.size * 0.65,
           marker.position.y,
         )
-        ..scale.setValues(markerSize, markerSize, landmark ? 1 : markerSize)
+        ..scale.setValues(markerSize, markerSize, markerSize)
         ..userData['markerId'] = marker.id;
-      if (landmark) mesh.lookAt(_camera.position);
       _visibleMarkers[entry.key] = marker;
     }
   }
@@ -1071,9 +1162,11 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   }
 
   IsometricMapMarker? _markerAt(Offset position) {
-    final size = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+    final size = _lastClampedLayoutSize.isEmpty
+        ? _viewportSize
+        : _lastClampedLayoutSize;
     if (size.isEmpty) return null;
-    
+
     // 1. Fast, reliable 2D screen proximity hit-testing:
     IsometricMapMarker? closestMarker;
     var minDistance = double.infinity;
@@ -1108,14 +1201,24 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
   Size get _viewportSize => Size(_threeJs.width, _threeJs.height);
 
   WorldMapPoint? _worldPointAt(Offset localPosition) {
-    final size = _lastClampedLayoutSize.isEmpty ? _viewportSize : _lastClampedLayoutSize;
+    final size = _lastClampedLayoutSize.isEmpty
+        ? _viewportSize
+        : _lastClampedLayoutSize;
     if (size.isEmpty) return null;
 
     // Direct analytical isometric unprojection: zero latency, zero raycast misses
-    final delta = _projectedWorldDeltaForScreen(localPosition, size, _pose.zoom);
+    final delta = _projectedWorldDeltaForScreen(
+      localPosition,
+      size,
+      _pose.zoom,
+    );
     final world = ProceduralFarmWorld.worldBounds;
-    final clampedX = (_pose.center.x + delta.x).clamp(world.left, world.right).toDouble();
-    final clampedY = (_pose.center.y + delta.y).clamp(world.top, world.bottom).toDouble();
+    final clampedX = (_pose.center.x + delta.x)
+        .clamp(world.left, world.right)
+        .toDouble();
+    final clampedY = (_pose.center.y + delta.y)
+        .clamp(world.top, world.bottom)
+        .toDouble();
     return WorldMapPoint(clampedX, clampedY);
   }
 
@@ -1141,8 +1244,9 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     _camera.updateMatrixWorld(true);
   }
 
-  void _rebuildVisibleMap({bool force = false}) {
+  Future<void> _rebuildVisibleMap({bool force = false}) async {
     if (!_sceneReady && !identical(_threeJs.scene, _scene)) return;
+    final buildRevision = ++_terrainBuildRevision;
     final visibleBounds = _visibleWorldBoundsFor(_pose);
     final parcelsVisible = widget.showParcels && _pose.zoom >= 0.22;
     final treesVisible = _pose.zoom >= 0.28;
@@ -1161,24 +1265,15 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         previousBounds.right >= visibleBounds.right &&
         previousBounds.bottom >= visibleBounds.bottom;
     if (!force && visibleAreaLoaded && !lodChanged) {
+      // A gesture can invalidate an in-flight parcel build while the terrain
+      // bounds still cover the viewport. Retry the parcel layer in that case.
+      if (parcelsVisible && !_parcelLayerReady) {
+        _rebuildParcelLayer(previousBounds);
+      }
       return;
     }
 
-    final terrainRoot = _terrainRoot;
-    if (terrainRoot != null) {
-      _animatedWindmillRotors.clear();
-      _disposeGroupGeometry(terrainRoot);
-      _disposeTransientMaterials();
-      for (final child in [...terrainRoot.children]) {
-        terrainRoot.remove(child);
-      }
-    }
-    final root = terrainRoot ?? three.Group();
-    _terrainRoot = root;
-    if (!_scene.children.contains(root)) _scene.add(root);
-
     final buildBounds = visibleBounds.inflate(farmWorldChunkSize * 1.0);
-    _drawRegions(root, buildBounds);
     final firstChunkX =
         ((buildBounds.left / farmWorldChunkSize).floor() - _chunkPadding).clamp(
           ProceduralFarmWorld.minChunkX,
@@ -1202,12 +1297,45 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
               ProceduralFarmWorld.maxChunkY,
             );
     final chunks = <WorldMapChunk>[];
-    for (var y = firstChunkY; y <= lastChunkY; y++) {
-      for (var x = firstChunkX; x <= lastChunkX; x++) {
-        if (!ProceduralFarmWorld.isChunkInBounds(x, y)) continue;
-        chunks.add(widget.world.chunkAt(x, y));
+    final chunkDetailsVisible =
+        parcelsVisible || treesVisible || mountainsVisible;
+    if (chunkDetailsVisible) {
+      for (var y = firstChunkY; y <= lastChunkY; y++) {
+        for (var x = firstChunkX; x <= lastChunkX; x++) {
+          if (!ProceduralFarmWorld.isChunkInBounds(x, y)) continue;
+          chunks.add(widget.world.chunkAt(x, y));
+          // Chunk generation can be CPU-heavy. Yield after each chunk so
+          // camera input and browser/Flutter frames remain responsive.
+          await Future<void>.delayed(Duration.zero);
+          if (!mounted ||
+              _mapGestureActive ||
+              buildRevision != _terrainBuildRevision) {
+            return;
+          }
+        }
       }
     }
+
+    if (!mounted ||
+        _mapGestureActive ||
+        buildRevision != _terrainBuildRevision) {
+      return;
+    }
+
+    final terrainRoot = _terrainRoot;
+    _animatedWindmillRotors.clear();
+    _animatedMarketFlags.clear();
+    if (terrainRoot != null) {
+      _disposeGroupGeometry(terrainRoot);
+      _disposeTransientMaterials();
+      for (final child in [...terrainRoot.children]) {
+        terrainRoot.remove(child);
+      }
+    }
+    final root = terrainRoot ?? three.Group();
+    _terrainRoot = root;
+    if (!_scene.children.contains(root)) _scene.add(root);
+    _drawRegions(root, buildBounds);
 
     final featureBounds = buildBounds.inflate(140);
     final roads = widget.world.roadSegmentsInBounds(
@@ -1232,6 +1360,9 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         .where((pond) => _pondBounds(pond).inflate(18).overlaps(featureBounds))
         .toList();
     final bridges = widget.world.bridgesInBounds(featureBounds);
+    final settlements = widget.world.settlementsInBounds(
+      buildBounds.inflate(260),
+    );
 
     final neighboringParcels = <_ParcelSpatialFeature>[];
     for (final chunk in chunks) {
@@ -1260,7 +1391,7 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
                 watercourses,
                 lakes,
                 ponds,
-                widget.world.settlements,
+                settlements,
                 pois,
                 bridges,
               ),
@@ -1281,11 +1412,17 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     if (widget.showRoutes) _drawRoads(root, roads, buildBounds);
     _drawWatercourses(root, watercourses, buildBounds);
     _drawLakes(root, lakes, buildBounds);
-    _drawSettlements(root, buildBounds, roads);
+    _drawSettlements(root, buildBounds, roads, settlements);
+    _drawHomeFarmstead(root, buildBounds);
     if (widget.showInfrastructure) {
-      _drawPointOfInterest(root, chunks, buildBounds);
+      _drawPointOfInterest(
+        root,
+        widget.world.pointsOfInterestInBounds(buildBounds),
+        buildBounds,
+      );
     }
     _drawBridges(root, buildBounds);
+    _refreshAnimatedMarketFlags();
 
     _rebuildParcelLayer(buildBounds);
 
@@ -1303,18 +1440,22 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
 
   void _rebuildParcelLayer([Rect? bounds]) {
     if (!_sceneReady) return;
-    final root = _parcelRoot;
-    if (root == null) return;
-    _disposeGroupGeometry(root);
-    for (final child in [...root.children]) {
-      root.remove(child);
-    }
-    _drawnParcelIds.clear();
-
+    final buildRevision = ++_parcelBuildRevision;
     final parcelsVisible = widget.showParcels && _pose.zoom >= 0.22;
-    if (!parcelsVisible) return;
+    if (!parcelsVisible) {
+      _replaceParcelRoot(three.Group(), const {});
+      return;
+    }
 
-    final buildBounds = bounds ?? _lastBuiltBounds ?? _visibleWorldBoundsFor(_pose).inflate(farmWorldChunkSize * 0.4);
+    _parcelLayerReady = false;
+    unawaited(_buildParcelLayer(bounds, buildRevision));
+  }
+
+  Future<void> _buildParcelLayer(Rect? bounds, int buildRevision) async {
+    final buildBounds =
+        bounds ??
+        _lastBuiltBounds ??
+        _visibleWorldBoundsFor(_pose).inflate(farmWorldChunkSize * 0.4);
     final firstChunkX =
         ((buildBounds.left / farmWorldChunkSize).floor() - _chunkPadding).clamp(
           ProceduralFarmWorld.minChunkX,
@@ -1368,6 +1509,9 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         .where((pond) => _pondBounds(pond).inflate(18).overlaps(featureBounds))
         .toList();
 
+    final nextRoot = three.Group();
+    final nextParcelIds = <String>{};
+    var drawnSinceYield = 0;
     for (final chunk in chunks) {
       for (final parcel in chunk.parcels) {
         final parcelBounds = _parcelBounds(parcel);
@@ -1380,10 +1524,50 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
               lakes,
               ponds,
             )) {
-          _drawParcel(root, parcel);
+          _drawParcel(nextRoot, parcel, drawnIds: nextParcelIds);
+          drawnSinceYield++;
+          if (drawnSinceYield >= 12) {
+            drawnSinceYield = 0;
+            await Future<void>.delayed(Duration.zero);
+            if (_parcelBuildIsStale(buildRevision)) {
+              _disposeGroupGeometry(nextRoot);
+              return;
+            }
+          }
         }
       }
+      await Future<void>.delayed(Duration.zero);
+      if (_parcelBuildIsStale(buildRevision)) {
+        _disposeGroupGeometry(nextRoot);
+        return;
+      }
     }
+
+    if (_parcelBuildIsStale(buildRevision)) {
+      _disposeGroupGeometry(nextRoot);
+      return;
+    }
+    _replaceParcelRoot(nextRoot, nextParcelIds);
+  }
+
+  bool _parcelBuildIsStale(int buildRevision) =>
+      !mounted ||
+      !_sceneReady ||
+      _mapGestureActive ||
+      buildRevision != _parcelBuildRevision;
+
+  void _replaceParcelRoot(three.Group nextRoot, Set<String> parcelIds) {
+    final previousRoot = _parcelRoot;
+    if (previousRoot != null) {
+      _disposeGroupGeometry(previousRoot);
+      _scene.remove(previousRoot);
+    }
+    _parcelRoot = nextRoot;
+    _scene.add(nextRoot);
+    _drawnParcelIds
+      ..clear()
+      ..addAll(parcelIds);
+    _parcelLayerReady = true;
   }
 
   void _drawRegions(three.Group root, Rect bounds) {
@@ -1406,8 +1590,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     }
   }
 
-  void _drawParcel(three.Group root, WorldMapParcel parcel) {
-    if (!_drawnParcelIds.add(parcel.id)) return;
+  void _drawParcel(
+    three.Group root,
+    WorldMapParcel parcel, {
+    Set<String>? drawnIds,
+  }) {
+    if (!(drawnIds ?? _drawnParcelIds).add(parcel.id)) return;
     final fieldState =
         widget.fieldStates[parcel.id] ?? _fallbackFieldState(parcel);
     final selected = widget.selectedParcelId == parcel.id;
@@ -1425,16 +1613,11 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
                 _cropColor(parcel.cropType),
               );
     final vertices = parcel.worldVertices;
-    root.add(_polygonMesh(vertices, material, height: 0.45, normalizeUvs: true));
+    root.add(
+      _polygonMesh(vertices, material, height: 0.45, normalizeUvs: true),
+    );
     if (widget.ownedParcelIds.contains(parcel.id)) {
-      root.add(
-        _outlineMesh(
-          vertices,
-          0xffe9d690,
-          2.1,
-          0.85,
-        ),
-      );
+      root.add(_outlineMesh(vertices, 0xffe9d690, 2.1, 0.85));
     }
   }
 
@@ -1472,7 +1655,11 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final parcelRadius = math.max(parcelBounds.width, parcelBounds.height) / 2;
 
     for (final road in roads) {
-      if (!_pointsOverlapBounds(road.points, parcelBounds.inflate(16), road.width)) {
+      if (!_pointsOverlapBounds(
+        road.points,
+        parcelBounds.inflate(16),
+        road.width,
+      )) {
         continue;
       }
       final safeDist = parcelRadius + road.width / 2 + 3.0;
@@ -1493,7 +1680,11 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       }
     }
     for (final watercourse in watercourses) {
-      if (!_pointsOverlapBounds(watercourse.points, parcelBounds.inflate(16), watercourse.width)) {
+      if (!_pointsOverlapBounds(
+        watercourse.points,
+        parcelBounds.inflate(16),
+        watercourse.width,
+      )) {
         continue;
       }
       final safeDist = parcelRadius + watercourse.width / 2 + 3.0;
@@ -1633,7 +1824,13 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       }
     }
     for (final watercourse in watercourses) {
-      if (!_pointsOverlapBounds(watercourse.points, bounds, watercourse.width)) continue;
+      if (!_pointsOverlapBounds(
+        watercourse.points,
+        bounds,
+        watercourse.width,
+      )) {
+        continue;
+      }
       final limit = keepout + watercourse.width / 2;
       final limitSq = limit * limit;
       for (var i = 0; i < watercourse.points.length - 1; i++) {
@@ -1654,8 +1851,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     _treeConflictCache[cacheKey] = false;
     return false;
   }
-
-
 
   IsometricFieldState _fallbackFieldState(WorldMapParcel parcel) {
     final hash = parcel.id.hashCode.abs();
@@ -1700,38 +1895,137 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       case WorldMapRoadType.arterial:
         // Modern Asfalt Ana Arter:
         // 1. Dış Çakıl/Toprak Banket
-        group.add(_staticTube(points, _tubeMaterial('art-shoulder', 0xff524a3e), road.width * 1.06, 1.9));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('art-shoulder', 0xff524a3e),
+            road.width * 1.06,
+            1.9,
+          ),
+        );
         // 2. Koyu Pürüzsüz Asfalt Yüzey
-        group.add(_staticTube(points, _tubeMaterial('art-pavement', 0xff2a2c2e), road.width * 0.88, 2.4));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('art-pavement', 0xff2a2c2e),
+            road.width * 0.88,
+            2.4,
+          ),
+        );
         // 3. Kenar Beyaz Güvenlik Çizgileri
-        group.add(_staticTube(points, _tubeMaterial('art-edge-white', 0xffe4e1d7), road.width * 0.82, 2.6));
-        group.add(_staticTube(points, _tubeMaterial('art-pavement-inner', 0xff2a2c2e), road.width * 0.70, 2.7));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('art-edge-white', 0xffe4e1d7),
+            road.width * 0.82,
+            2.6,
+          ),
+        );
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('art-pavement-inner', 0xff2a2c2e),
+            road.width * 0.70,
+            2.7,
+          ),
+        );
         // 4. Kesikli Sarı Merkez Şerit Çizgisi
-        _drawDashedRoadLine(group, points, 0xffebb842, width: 1.8, height: 3.0, dashLength: 22.0, gapLength: 14.0);
+        _drawDashedRoadLine(
+          group,
+          points,
+          0xffebb842,
+          width: 1.8,
+          height: 3.0,
+          dashLength: 22.0,
+          gapLength: 14.0,
+        );
         break;
 
       case WorldMapRoadType.secondary:
         // Rustik Taş & Stabilize Köy Yolu:
-        group.add(_staticTube(points, _tubeMaterial('sec-shoulder', 0xff6b5f4c), road.width * 0.98, 1.8));
-        group.add(_staticTube(points, _tubeMaterial('sec-cobble', 0xff988c78), road.width * 0.80, 2.3));
-        group.add(_staticTube(points, _tubeMaterial('sec-curb', 0xff7a6d59), road.width * 0.52, 2.5));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('sec-shoulder', 0xff6b5f4c),
+            road.width * 0.98,
+            1.8,
+          ),
+        );
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('sec-cobble', 0xff988c78),
+            road.width * 0.80,
+            2.3,
+          ),
+        );
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('sec-curb', 0xff7a6d59),
+            road.width * 0.52,
+            2.5,
+          ),
+        );
         break;
 
       case WorldMapRoadType.dirt:
         // Killi Toprak Çiftlik / Traktör Yolu:
-        group.add(_staticTube(points, _tubeMaterial('dirt-shoulder', 0xff684c2d), road.width * 0.92, 1.7));
-        group.add(_staticTube(points, _tubeMaterial('dirt-surface', 0xff8b683e), road.width * 0.74, 2.1));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('dirt-shoulder', 0xff684c2d),
+            road.width * 0.92,
+            1.7,
+          ),
+        );
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('dirt-surface', 0xff8b683e),
+            road.width * 0.74,
+            2.1,
+          ),
+        );
         // Çift traktör tekerlek izleri (Dual Wheel Ruts):
         final rutLeft = _offsetPath(points, -road.width * 0.23);
         final rutRight = _offsetPath(points, road.width * 0.23);
-        group.add(_staticTube(rutLeft, _tubeMaterial('dirt-rut', 0xff4e351b), road.width * 0.18, 2.4));
-        group.add(_staticTube(rutRight, _tubeMaterial('dirt-rut', 0xff4e351b), road.width * 0.18, 2.4));
+        group.add(
+          _staticTube(
+            rutLeft,
+            _tubeMaterial('dirt-rut', 0xff4e351b),
+            road.width * 0.18,
+            2.4,
+          ),
+        );
+        group.add(
+          _staticTube(
+            rutRight,
+            _tubeMaterial('dirt-rut', 0xff4e351b),
+            road.width * 0.18,
+            2.4,
+          ),
+        );
         break;
 
       case WorldMapRoadType.trail:
         // Organik Patika / Yürüyüş Yolu:
-        group.add(_staticTube(points, _tubeMaterial('trail-edge', 0xff7a6649), road.width * 0.76, 1.6));
-        group.add(_staticTube(points, _tubeMaterial('trail-path', 0xff9e845c), road.width * 0.46, 2.0));
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('trail-edge', 0xff7a6649),
+            road.width * 0.76,
+            1.6,
+          ),
+        );
+        group.add(
+          _staticTube(
+            points,
+            _tubeMaterial('trail-path', 0xff9e845c),
+            road.width * 0.46,
+            2.0,
+          ),
+        );
         break;
     }
   }
@@ -1756,7 +2050,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       final len = math.sqrt(dirX * dirX + dirY * dirY);
       final normalX = len > 0.0001 ? -dirY / len : 0.0;
       final normalY = len > 0.0001 ? dirX / len : 1.0;
-      result.add(WorldMapPoint(current.x + normalX * offset, current.y + normalY * offset));
+      result.add(
+        WorldMapPoint(
+          current.x + normalX * offset,
+          current.y + normalY * offset,
+        ),
+      );
     }
     return result;
   }
@@ -1794,17 +2093,11 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         final step = math.min(needed, remainInSeg);
 
         final tStart = walked / segLen;
-        final startPt = WorldMapPoint(
-          p0.x + dx * tStart,
-          p0.y + dy * tStart,
-        );
+        final startPt = WorldMapPoint(p0.x + dx * tStart, p0.y + dy * tStart);
         walked += step;
         accumulated += step;
         final tEnd = walked / segLen;
-        final endPt = WorldMapPoint(
-          p0.x + dx * tEnd,
-          p0.y + dy * tEnd,
-        );
+        final endPt = WorldMapPoint(p0.x + dx * tEnd, p0.y + dy * tEnd);
 
         if (drawing) {
           if (currentSegment.isEmpty) currentSegment.add(startPt);
@@ -1965,14 +2258,19 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       var cached = _cachedWaterObjects[watercourse.id];
       if (cached == null) {
         cached = three.Group();
-        final canal = watercourse.type == WorldMapWatercourseType.irrigationCanal;
+        final canal =
+            watercourse.type == WorldMapWatercourseType.irrigationCanal;
         final bank = _waterMaterial('bank', canal ? 0xff98855f : 0xff827a61);
         final water = _waterMaterial(
           'water:${watercourse.type.index}',
           canal ? 0xff55969a : 0xff3c8390,
         );
-        cached.add(_staticTube(watercourse.points, bank, watercourse.width * 0.67, 1.1));
-        cached.add(_staticTube(watercourse.points, water, watercourse.width * 0.47, 1.8));
+        cached.add(
+          _staticTube(watercourse.points, bank, watercourse.width * 0.67, 1.1),
+        );
+        cached.add(
+          _staticTube(watercourse.points, water, watercourse.width * 0.47, 1.8),
+        );
         if (!canal) {
           cached.add(
             _staticTube(
@@ -2007,7 +2305,9 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
           _waterMaterial('lake-bank', 0xff958467),
           height: 0.9,
         );
-        if (bankMesh.geometry != null) _staticGeometryCache.add(bankMesh.geometry!);
+        if (bankMesh.geometry != null) {
+          _staticGeometryCache.add(bankMesh.geometry!);
+        }
         cached.add(bankMesh);
 
         final waterMesh = _polygonMesh(
@@ -2015,11 +2315,15 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
           _waterMaterial('lake:${lake.id}', lake.waterColor & 0x00ffffff),
           height: 1.5,
         );
-        if (waterMesh.geometry != null) _staticGeometryCache.add(waterMesh.geometry!);
+        if (waterMesh.geometry != null) {
+          _staticGeometryCache.add(waterMesh.geometry!);
+        }
         cached.add(waterMesh);
 
         final outline = _outlineMesh(bank, 0xffb5b89a, 4.0, 1.7);
-        if (outline.geometry != null) _staticGeometryCache.add(outline.geometry!);
+        if (outline.geometry != null) {
+          _staticGeometryCache.add(outline.geometry!);
+        }
         cached.add(outline);
 
         _cachedLakeObjects[lake.id] = cached;
@@ -2079,7 +2383,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         () => three.MeshLambertMaterial.fromMap({'color': color}),
       );
 
-  void _drawWindmill(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawWindmill(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final stoneMat = _infraMat('windmill-stone', 0xff998f82);
     final woodMat = _infraMat('windmill-wood', 0xff664930);
@@ -2090,13 +2399,17 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final windmillGroup = three.Group()..position.setValues(x, 0, z);
 
     // Taş taban gövdesi
-    final baseMesh = three.Mesh(_getCylinderGeometry(15 * s, 21 * s, 32 * s, 8), stoneMat)
-      ..position.y = 16 * s;
+    final baseMesh = three.Mesh(
+      _getCylinderGeometry(15 * s, 21 * s, 32 * s, 8),
+      stoneMat,
+    )..position.y = 16 * s;
     windmillGroup.add(baseMesh);
 
     // Ahşap orta kule
-    final midMesh = three.Mesh(_getCylinderGeometry(12 * s, 15 * s, 18 * s, 8), woodMat)
-      ..position.y = 41 * s;
+    final midMesh = three.Mesh(
+      _getCylinderGeometry(12 * s, 15 * s, 18 * s, 8),
+      woodMat,
+    )..position.y = 41 * s;
     windmillGroup.add(midMesh);
 
     // Konik kiremit çatı
@@ -2108,29 +2421,33 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final rotor = three.Group()..position.setValues(0, 48 * s, 13.5 * s);
 
     // Merkez göbek
-    final hub = three.Mesh(_getCylinderGeometry(2.5 * s, 2.5 * s, 3.5 * s, 8), woodMat)
-      ..rotation.x = math.pi / 2;
+    final hub = three.Mesh(
+      _getCylinderGeometry(2.5 * s, 2.5 * s, 3.5 * s, 8),
+      woodMat,
+    )..rotation.x = math.pi / 2;
     rotor.add(hub);
 
     // 4 Kanat ve Yelken Kumaşları
     for (var i = 0; i < 4; i++) {
       final angle = i * math.pi / 2;
-      final arm = three.Mesh(_getBoxGeometry(2.4 * s, 42 * s, 1.2 * s), bladeMat)
-        ..rotation.z = angle
-        ..position.setValues(
-          math.sin(angle) * 19 * s,
-          math.cos(angle) * 19 * s,
-          0,
-        );
+      final arm =
+          three.Mesh(_getBoxGeometry(2.4 * s, 42 * s, 1.2 * s), bladeMat)
+            ..rotation.z = angle
+            ..position.setValues(
+              math.sin(angle) * 19 * s,
+              math.cos(angle) * 19 * s,
+              0,
+            );
       rotor.add(arm);
 
-      final sail = three.Mesh(_getBoxGeometry(7.5 * s, 32 * s, 0.4 * s), sailMat)
-        ..rotation.z = angle
-        ..position.setValues(
-          math.sin(angle) * 20 * s + math.cos(angle) * 4 * s,
-          math.cos(angle) * 20 * s - math.sin(angle) * 4 * s,
-          0.3 * s,
-        );
+      final sail =
+          three.Mesh(_getBoxGeometry(7.5 * s, 32 * s, 0.4 * s), sailMat)
+            ..rotation.z = angle
+            ..position.setValues(
+              math.sin(angle) * 20 * s + math.cos(angle) * 4 * s,
+              math.cos(angle) * 20 * s - math.sin(angle) * 4 * s,
+              0.3 * s,
+            );
       rotor.add(sail);
     }
 
@@ -2142,7 +2459,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     root.add(windmillGroup);
   }
 
-  void _drawGrainSiloPair(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawGrainSiloPair(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final steelMat = _infraMat('silo-steel', 0xffc4ccd2);
     final roofMat = _infraMat('silo-roof', 0xff86949e);
@@ -2152,12 +2474,16 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final siloGroup = three.Group()..position.setValues(x, 0, z);
 
     for (final dx in [-13.0 * s, 13.0 * s]) {
-      final base = three.Mesh(_getCylinderGeometry(11 * s, 11.5 * s, 4 * s, 12), baseMat)
-        ..position.setValues(dx, 2 * s, 0);
+      final base = three.Mesh(
+        _getCylinderGeometry(11 * s, 11.5 * s, 4 * s, 12),
+        baseMat,
+      )..position.setValues(dx, 2 * s, 0);
       siloGroup.add(base);
 
-      final body = three.Mesh(_getCylinderGeometry(10 * s, 10 * s, 38 * s, 12), steelMat)
-        ..position.setValues(dx, 23 * s, 0);
+      final body = three.Mesh(
+        _getCylinderGeometry(10 * s, 10 * s, 38 * s, 12),
+        steelMat,
+      )..position.setValues(dx, 23 * s, 0);
       siloGroup.add(body);
 
       final roof = three.Mesh(_getConeGeometry(10.5 * s, 9 * s, 12), roofMat)
@@ -2172,7 +2498,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     root.add(siloGroup);
   }
 
-  void _drawRedBarn(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawRedBarn(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final redWoodMat = _infraMat('barn-red', 0xffa02c24);
     final whiteTrimMat = _infraMat('barn-white', 0xfff6f4ec);
@@ -2182,23 +2513,31 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final barnGroup = three.Group()..position.setValues(x, 0, z);
 
     // Taş temel
-    final foundation = three.Mesh(_getBoxGeometry(40 * s, 4 * s, 50 * s), stoneFoundation)
-      ..position.y = 2 * s;
+    final foundation = three.Mesh(
+      _getBoxGeometry(40 * s, 4 * s, 50 * s),
+      stoneFoundation,
+    )..position.y = 2 * s;
     barnGroup.add(foundation);
 
     // Kırmızı ahşap ana gövde
-    final mainBody = three.Mesh(_getBoxGeometry(38 * s, 24 * s, 48 * s), redWoodMat)
-      ..position.y = 16 * s;
+    final mainBody = three.Mesh(
+      _getBoxGeometry(38 * s, 24 * s, 48 * s),
+      redWoodMat,
+    )..position.y = 16 * s;
     barnGroup.add(mainBody);
 
     // Beyaz kapı detayı
-    final door = three.Mesh(_getBoxGeometry(16 * s, 18 * s, 49 * s), whiteTrimMat)
-      ..position.y = 13 * s;
+    final door = three.Mesh(
+      _getBoxGeometry(16 * s, 18 * s, 49 * s),
+      whiteTrimMat,
+    )..position.y = 13 * s;
     barnGroup.add(door);
 
     // Kırma ambar çatısı (Gambrel Roof)
-    final roofLower = three.Mesh(_getBoxGeometry(41 * s, 9 * s, 51 * s), roofMat)
-      ..position.y = 31 * s;
+    final roofLower = three.Mesh(
+      _getBoxGeometry(41 * s, 9 * s, 51 * s),
+      roofMat,
+    )..position.y = 31 * s;
     barnGroup.add(roofLower);
 
     final roofPeak = three.Mesh(_getBoxGeometry(26 * s, 8 * s, 51 * s), roofMat)
@@ -2206,19 +2545,27 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     barnGroup.add(roofPeak);
 
     // Havalandırma kulesi (Cupola)
-    final cupola = three.Mesh(_getBoxGeometry(8 * s, 7 * s, 8 * s), whiteTrimMat)
-      ..position.y = 44.5 * s;
+    final cupola = three.Mesh(
+      _getBoxGeometry(8 * s, 7 * s, 8 * s),
+      whiteTrimMat,
+    )..position.y = 44.5 * s;
     barnGroup.add(cupola);
 
-    final cupolaRoof = three.Mesh(_getConeGeometry(5.5 * s, 6 * s, 4), redWoodMat)
-      ..position.y = 50 * s
-      ..rotation.y = math.pi / 4;
+    final cupolaRoof =
+        three.Mesh(_getConeGeometry(5.5 * s, 6 * s, 4), redWoodMat)
+          ..position.y = 50 * s
+          ..rotation.y = math.pi / 4;
     barnGroup.add(cupolaRoof);
 
     root.add(barnGroup);
   }
 
-  void _drawTownHall(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawTownHall(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final stoneMat = _infraMat('townhall-stone', 0xffd5c49d);
     final roofMat = _infraMat('townhall-roof', 0xff9f4734);
@@ -2229,8 +2576,10 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final hallGroup = three.Group()..position.setValues(x, 0, z);
 
     // 2 katlı ana taş bina
-    final baseBuilding = three.Mesh(_getBoxGeometry(54 * s, 26 * s, 40 * s), stoneMat)
-      ..position.y = 13 * s;
+    final baseBuilding = three.Mesh(
+      _getBoxGeometry(54 * s, 26 * s, 40 * s),
+      stoneMat,
+    )..position.y = 13 * s;
     hallGroup.add(baseBuilding);
 
     // Ana çatı
@@ -2256,26 +2605,41 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
 
     // Saat kadranları (Ön ve arka)
     for (final dz in [-8.2 * s, 8.2 * s]) {
-      final clockRing = three.Mesh(_getCylinderGeometry(4.2 * s, 4.2 * s, 0.8 * s, 12), goldTrim)
-        ..position.setValues(0, 58 * s, dz)
-        ..rotation.x = math.pi / 2;
+      final clockRing =
+          three.Mesh(
+              _getCylinderGeometry(4.2 * s, 4.2 * s, 0.8 * s, 12),
+              goldTrim,
+            )
+            ..position.setValues(0, 58 * s, dz)
+            ..rotation.x = math.pi / 2;
       hallGroup.add(clockRing);
 
-      final clockFace = three.Mesh(_getCylinderGeometry(3.6 * s, 3.6 * s, 0.9 * s, 12), clockMat)
-        ..position.setValues(0, 58 * s, dz)
-        ..rotation.x = math.pi / 2;
+      final clockFace =
+          three.Mesh(
+              _getCylinderGeometry(3.6 * s, 3.6 * s, 0.9 * s, 12),
+              clockMat,
+            )
+            ..position.setValues(0, 58 * s, dz)
+            ..rotation.x = math.pi / 2;
       hallGroup.add(clockFace);
     }
 
     root.add(hallGroup);
   }
 
-  void _drawMarketStalls(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawMarketStalls(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final woodMat = _infraMat('market-wood', 0xff7b5636);
     final tentRed = _infraMat('market-tent-red', 0xffbe372b);
     final tentBlue = _infraMat('market-tent-blue', 0xff3b7396);
     final tentGold = _infraMat('market-tent-gold', 0xffd99d32);
+    final crateMat = _infraMat('market-crate', 0xff9a7043);
+    final produceMat = _infraMat('market-produce', 0xff8da448);
 
     final stalls = [
       (dx: -16.0 * s, dz: -12.0 * s, mat: tentRed),
@@ -2284,31 +2648,132 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     ];
 
     for (final stall in stalls) {
-      final group = three.Group()..position.setValues(x + stall.dx, 0, z + stall.dz);
+      final group = three.Group()
+        ..position.setValues(x + stall.dx, 0, z + stall.dz);
 
-      final table = three.Mesh(_getBoxGeometry(16 * s, 8 * s, 10 * s), woodMat)
-        ..position.y = 4 * s;
+      final table = three.Mesh(_getBoxGeometry(19 * s, 2 * s, 12 * s), woodMat)
+        ..position.y = 9 * s;
       group.add(table);
 
+      for (final dx in [-7.0 * s, 7.0 * s]) {
+        for (final dz in [-4.0 * s, 4.0 * s]) {
+          final leg = three.Mesh(_getBoxGeometry(2 * s, 9 * s, 2 * s), woodMat)
+            ..position.setValues(dx, 4.5 * s, dz);
+          group.add(leg);
+        }
+      }
+
       final canopy = three.Mesh(_getConeGeometry(11 * s, 7 * s, 4), stall.mat)
-        ..position.y = 15 * s
+        ..position.y = 18 * s
         ..rotation.y = math.pi / 4;
       group.add(canopy);
 
+      final crate = three.Mesh(_getBoxGeometry(5 * s, 4 * s, 5 * s), crateMat)
+        ..position.setValues(-4 * s, 12 * s, 0);
+      final produce = three.Mesh(_getSphereGeometry(1.9 * s, 6, 5), produceMat)
+        ..position.setValues(3 * s, 12.5 * s, 0);
+      group
+        ..add(crate)
+        ..add(produce);
+
       root.add(group);
+
+      // Small cloth pennants give the 3D market a little life without adding
+      // any more map-wide animated objects than the visible market stalls.
+      final flagGroup = three.Group()
+        ..position.setValues(x + stall.dx + 8 * s, 0, z + stall.dz - 4 * s);
+      final pole = three.Mesh(
+        _getBoxGeometry(1.6 * s, 25 * s, 1.6 * s),
+        woodMat,
+      )..position.y = 12.5 * s;
+      final flag = three.Mesh(_getBoxGeometry(8 * s, 5 * s, 0.8 * s), stall.mat)
+        ..position.setValues(4.5 * s, 21 * s, 0);
+      flagGroup.userData['animatedMarketFlag'] = true;
+      flagGroup
+        ..add(pole)
+        ..add(flag);
+      root.add(flagGroup);
     }
   }
 
-  void _drawSettlements(three.Group root, Rect bounds, [List<WorldMapRoad> roads = const []]) {
+  void _drawHomeFarmstead(three.Group root, Rect bounds) {
+    if (!widget.showInfrastructure) return;
+    const homeX = -150.0;
+    const homeZ = -120.0;
+    // Keep the compound inside the reserved home clearance so neighboring
+    // procedural parcels remain open and the 3D buildings never cover fields.
+    const footprint = Rect.fromLTRB(-225, -171, -75, -69);
+    if (!footprint.overlaps(bounds)) return;
+
+    _drawRedBarn(root, homeX - 24, homeZ - 15, scale: 0.72);
+    _drawGrainSiloPair(root, homeX - 31, homeZ + 29, scale: 0.38);
+    _drawFarmhouse(root, homeX + 24, homeZ - 15, scale: 0.82);
+    _drawWindmill(root, homeX + 42, homeZ + 30, scale: 0.38);
+  }
+
+  void _drawFarmhouse(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
+    final s = scale;
+    final wallMat = _infraMat('farmhouse-walls', 0xffe4d5b8);
+    final roofMat = _infraMat('farmhouse-roof', 0xff7b4234);
+    final trimMat = _infraMat('farmhouse-trim', 0xfff4eddf);
+    final glassMat = _infraMat('farmhouse-glass', 0xff497786);
+    final chimneyMat = _infraMat('farmhouse-chimney', 0xff905846);
+    final house = three.Group()..position.setValues(x, 0, z);
+
+    final foundation = three.Mesh(
+      _getBoxGeometry(35 * s, 3 * s, 29 * s),
+      chimneyMat,
+    )..position.y = 1.5 * s;
+    final walls = three.Mesh(_getBoxGeometry(32 * s, 18 * s, 26 * s), wallMat)
+      ..position.y = 12 * s;
+    final roof = three.Mesh(_getConeGeometry(22 * s, 14 * s, 4), roofMat)
+      ..position.y = 28 * s
+      ..rotation.y = math.pi / 4;
+    final door = three.Mesh(_getBoxGeometry(6 * s, 12 * s, 1.4 * s), trimMat)
+      ..position.setValues(0, 7 * s, 13.6 * s);
+    final windowLeft = three.Mesh(
+      _getBoxGeometry(5 * s, 5 * s, 1.2 * s),
+      glassMat,
+    )..position.setValues(-9 * s, 14 * s, 13.5 * s);
+    final windowRight = three.Mesh(
+      _getBoxGeometry(5 * s, 5 * s, 1.2 * s),
+      glassMat,
+    )..position.setValues(9 * s, 14 * s, 13.5 * s);
+    final chimney = three.Mesh(
+      _getBoxGeometry(4 * s, 13 * s, 4 * s),
+      chimneyMat,
+    )..position.setValues(9 * s, 29 * s, -5 * s);
+    house
+      ..add(foundation)
+      ..add(walls)
+      ..add(roof)
+      ..add(door)
+      ..add(windowLeft)
+      ..add(windowRight)
+      ..add(chimney);
+    root.add(house);
+  }
+
+  void _drawSettlements(
+    three.Group root,
+    Rect bounds, [
+    List<WorldMapRoad> roads = const [],
+    List<WorldMapSettlement> settlements = const [],
+  ]) {
     if (!widget.showInfrastructure) return;
     final houses = <({double x, double z, double scale, int variation})>[];
 
-    for (final settlement in widget.world.settlements) {
+    for (final settlement in settlements) {
       final spread = switch (settlement.kind) {
-        WorldMapSettlementKind.city => 190.0,
-        WorldMapSettlementKind.town => 125.0,
-        WorldMapSettlementKind.village => 72.0,
-        WorldMapSettlementKind.hamlet => 42.0,
+        WorldMapSettlementKind.city => 220.0,
+        WorldMapSettlementKind.town => 160.0,
+        WorldMapSettlementKind.village => 112.0,
+        WorldMapSettlementKind.hamlet => 68.0,
       };
       final landmarkSize = switch (settlement.kind) {
         WorldMapSettlementKind.city => 230.0,
@@ -2316,27 +2781,47 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
         WorldMapSettlementKind.village => 118.0,
         WorldMapSettlementKind.hamlet => 82.0,
       };
-      if (!bounds
-          .inflate(spread + landmarkSize / 2)
-          .contains(Offset(settlement.position.x, settlement.position.y))) {
-        continue;
-      }
+      final center = Offset(settlement.position.x, settlement.position.y);
+      final landmarkBounds = Rect.fromCenter(
+        center: center,
+        width: landmarkSize + 90,
+        height: landmarkSize + 90,
+      );
 
       // Şehir ve kasaba merkezinde Saat Kulesi ve Pazar Tezgâhları
-      if (settlement.kind == WorldMapSettlementKind.city ||
-          settlement.kind == WorldMapSettlementKind.town) {
-        final hallScale = settlement.kind == WorldMapSettlementKind.city ? 1.2 : 0.95;
-        _drawTownHall(root, settlement.position.x, settlement.position.y, scale: hallScale);
-        _drawMarketStalls(root, settlement.position.x + 36 * hallScale, settlement.position.y + 18 * hallScale, scale: hallScale * 0.9);
-      } else if (settlement.kind == WorldMapSettlementKind.village) {
-        _drawMarketStalls(root, settlement.position.x, settlement.position.y, scale: 0.9);
+      if (landmarkBounds.overlaps(bounds) &&
+          (settlement.kind == WorldMapSettlementKind.city ||
+              settlement.kind == WorldMapSettlementKind.town)) {
+        final hallScale = settlement.kind == WorldMapSettlementKind.city
+            ? 1.2
+            : 0.95;
+        _drawTownHall(
+          root,
+          settlement.position.x,
+          settlement.position.y,
+          scale: hallScale,
+        );
+        _drawMarketStalls(
+          root,
+          settlement.position.x + 36 * hallScale,
+          settlement.position.y + 18 * hallScale,
+          scale: hallScale * 0.9,
+        );
+      } else if (landmarkBounds.overlaps(bounds) &&
+          settlement.kind == WorldMapSettlementKind.village) {
+        _drawMarketStalls(
+          root,
+          settlement.position.x,
+          settlement.position.y,
+          scale: 0.9,
+        );
       }
 
       final count = switch (settlement.kind) {
-        WorldMapSettlementKind.city => 10,
-        WorldMapSettlementKind.town => 6,
-        WorldMapSettlementKind.village => 4,
-        WorldMapSettlementKind.hamlet => 2,
+        WorldMapSettlementKind.city => 14,
+        WorldMapSettlementKind.town => 10,
+        WorldMapSettlementKind.village => 9,
+        WorldMapSettlementKind.hamlet => 5,
       };
       final houseScale = switch (settlement.kind) {
         WorldMapSettlementKind.city => 1.2,
@@ -2346,14 +2831,25 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       };
       for (var i = 0; i < count; i++) {
         final angle = (i * 2.399963) + (settlement.position.x * 0.001);
-        final distance = spread * (0.38 + 0.62 * ((i % 3) / 2));
+        final distance = spread * (0.62 + 0.38 * ((i % 4) / 3));
         final x = settlement.position.x + math.cos(angle) * distance;
         final z = settlement.position.y + math.sin(angle) * distance;
+        final houseWidth = 27 * houseScale;
+        final houseBounds = Rect.fromCenter(
+          center: Offset(x, z),
+          width: houseWidth + 12,
+          height: houseWidth + 12,
+        );
+        if (!houseBounds.overlaps(bounds)) continue;
 
         // Evlerin yolların üstüne çıkmasını önle:
-        final houseClearance = 20.0 * houseScale;
+        final houseClearance = houseWidth * 0.72;
         final roadCollision = roads.any((road) {
-          if (!_pointsOverlapBounds(road.points, Rect.fromCircle(center: Offset(x, z), radius: 40), road.width)) {
+          if (!_pointsOverlapBounds(
+            road.points,
+            houseBounds.inflate(road.width),
+            road.width,
+          )) {
             return false;
           }
           final limit = houseClearance + road.width / 2;
@@ -2384,8 +2880,16 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     final roofGeometry = three.ConeGeometry(0.86, 1, 4)..rotateY(math.pi / 4);
     final wallMaterial = _infraMat('house-walls', 0xffffffff);
     final roofMaterial = _infraMat('house-roofs', 0xffffffff);
-    final walls = three.InstancedMesh(wallGeometry, wallMaterial, houses.length);
-    final roofs = three.InstancedMesh(roofGeometry, roofMaterial, houses.length);
+    final walls = three.InstancedMesh(
+      wallGeometry,
+      wallMaterial,
+      houses.length,
+    );
+    final roofs = three.InstancedMesh(
+      roofGeometry,
+      roofMaterial,
+      houses.length,
+    );
 
     for (var index = 0; index < houses.length; index++) {
       final house = houses[index];
@@ -2507,7 +3011,12 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     height: mountain.height * 0.84,
   );
 
-  void _drawWaterWell(three.Group root, double x, double z, {double scale = 1.0}) {
+  void _drawWaterWell(
+    three.Group root,
+    double x,
+    double z, {
+    double scale = 1.0,
+  }) {
     final s = scale;
     final stoneMat = _infraMat('well-stone', 0xff8c8478);
     final woodMat = _infraMat('well-wood', 0xff664930);
@@ -2516,12 +3025,16 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
 
     final group = three.Group()..position.setValues(x, 0, z);
 
-    final basin = three.Mesh(_getCylinderGeometry(10 * s, 11 * s, 8 * s, 10), stoneMat)
-      ..position.y = 4 * s;
+    final basin = three.Mesh(
+      _getCylinderGeometry(10 * s, 11 * s, 8 * s, 10),
+      stoneMat,
+    )..position.y = 4 * s;
     group.add(basin);
 
-    final water = three.Mesh(_getCylinderGeometry(8.5 * s, 8.5 * s, 1 * s, 10), waterMat)
-      ..position.y = 6.5 * s;
+    final water = three.Mesh(
+      _getCylinderGeometry(8.5 * s, 8.5 * s, 1 * s, 10),
+      waterMat,
+    )..position.y = 6.5 * s;
     group.add(water);
 
     for (final dx in [-8.0 * s, 8.0 * s]) {
@@ -2539,46 +3052,70 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
 
   void _drawPointOfInterest(
     three.Group root,
-    List<WorldMapChunk> chunks,
+    List<WorldMapPointOfInterest> pointsOfInterest,
     Rect bounds,
   ) {
-    for (final chunk in chunks) {
-      for (final poi in chunk.pointsOfInterest) {
-        if (!bounds
-            .inflate(70)
-            .contains(Offset(poi.position.x, poi.position.y))) {
-          continue;
-        }
-
-        var cached = _cachedPoiObjects[poi.id];
-        if (cached == null) {
-          cached = three.Group();
-          switch (poi.type) {
-            case WorldPointOfInterestType.mill:
-              _drawWindmill(cached, poi.position.x, poi.position.y, scale: 1.15);
-              break;
-            case WorldPointOfInterestType.timberYard:
-              _drawGrainSiloPair(cached, poi.position.x - 22, poi.position.y, scale: 1.05);
-              _drawRedBarn(cached, poi.position.x + 26, poi.position.y, scale: 0.95);
-              break;
-            case WorldPointOfInterestType.village:
-              _drawTownHall(cached, poi.position.x, poi.position.y, scale: 0.95);
-              _drawMarketStalls(cached, poi.position.x, poi.position.y + 36, scale: 0.85);
-              break;
-            case WorldPointOfInterestType.water:
-              _drawWaterWell(cached, poi.position.x, poi.position.y, scale: 1.1);
-              break;
-          }
-          _cachedPoiObjects[poi.id] = cached;
-        }
-
-        final rotor = cached.userData['rotor'] as three.Object3D?;
-        if (rotor != null && !_animatedWindmillRotors.contains(rotor)) {
-          _animatedWindmillRotors.add(rotor);
-        }
-        root.add(cached);
+    for (final poi in pointsOfInterest) {
+      if (!bounds
+          .inflate(70)
+          .contains(Offset(poi.position.x, poi.position.y))) {
+        continue;
       }
+
+      var cached = _cachedPoiObjects[poi.id];
+      if (cached == null) {
+        cached = three.Group();
+        switch (poi.type) {
+          case WorldPointOfInterestType.mill:
+            _drawWindmill(cached, poi.position.x, poi.position.y, scale: 1.15);
+            break;
+          case WorldPointOfInterestType.timberYard:
+            _drawGrainSiloPair(
+              cached,
+              poi.position.x - 22,
+              poi.position.y,
+              scale: 1.05,
+            );
+            _drawRedBarn(
+              cached,
+              poi.position.x + 26,
+              poi.position.y,
+              scale: 0.95,
+            );
+            break;
+          case WorldPointOfInterestType.village:
+            _drawTownHall(cached, poi.position.x, poi.position.y, scale: 0.95);
+            _drawMarketStalls(
+              cached,
+              poi.position.x,
+              poi.position.y + 36,
+              scale: 0.85,
+            );
+            break;
+          case WorldPointOfInterestType.water:
+            _drawWaterWell(cached, poi.position.x, poi.position.y, scale: 1.1);
+            break;
+        }
+        _cachedPoiObjects[poi.id] = cached;
+      }
+
+      final rotor = cached.userData['rotor'] as three.Object3D?;
+      if (rotor != null && !_animatedWindmillRotors.contains(rotor)) {
+        _animatedWindmillRotors.add(rotor);
+      }
+      root.add(cached);
     }
+  }
+
+  void _refreshAnimatedMarketFlags() {
+    _animatedMarketFlags.clear();
+    final root = _terrainRoot;
+    if (root == null) return;
+    root.traverse((object) {
+      if (object.userData['animatedMarketFlag'] == true) {
+        _animatedMarketFlags.add(object);
+      }
+    });
   }
 
   void _drawBridges(three.Group root, Rect bounds) {
@@ -2609,7 +3146,6 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
     }
   }
 
-
   three.Mesh _polygonMesh(
     List<WorldMapPoint> points,
     three.Material material, {
@@ -2623,20 +3159,38 @@ class _IsometricWorldMapViewState extends State<IsometricWorldMapView> {
       final p3 = points[3];
       final geometry = three.BufferGeometry();
       final vertices = <double>[
-        p0.x, height, p0.y,
-        p1.x, height, p1.y,
-        p2.x, height, p2.y,
-        p0.x, height, p0.y,
-        p2.x, height, p2.y,
-        p3.x, height, p3.y,
+        p0.x,
+        height,
+        p0.y,
+        p1.x,
+        height,
+        p1.y,
+        p2.x,
+        height,
+        p2.y,
+        p0.x,
+        height,
+        p0.y,
+        p2.x,
+        height,
+        p2.y,
+        p3.x,
+        height,
+        p3.y,
       ];
       final uvs = <double>[
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0,
-        0.0, 0.0,
-        1.0, 1.0,
-        0.0, 1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        1.0,
       ];
       geometry.setAttribute(
         three.Attribute.position,

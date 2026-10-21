@@ -38,6 +38,99 @@ enum OpeningStage {
 }
 
 /// Immutable value object representing the snapshot state of an opening session.
+class WoodcuttingOpeningProgress {
+  const WoodcuttingOpeningProgress({
+    this.activeSeconds = 0,
+    this.cash = 140,
+    this.carriedLogs = 0,
+    this.logsDelivered = 0,
+    this.deliveryCount = 0,
+    this.hasSharpChainUpgrade = false,
+    this.hasEngineUpgrade = false,
+  });
+
+  static const double minimumActiveSeconds = 150;
+  static const int minimumDeliveryCount = 2;
+  static const int minimumUpgradeCount = 1;
+
+  final double activeSeconds;
+  final double cash;
+  final int carriedLogs;
+  final int logsDelivered;
+  final int deliveryCount;
+  final bool hasSharpChainUpgrade;
+  final bool hasEngineUpgrade;
+
+  int get upgradeCount =>
+      (hasSharpChainUpgrade ? 1 : 0) + (hasEngineUpgrade ? 1 : 0);
+
+  bool get meetsCompletionRequirements =>
+      activeSeconds >= minimumActiveSeconds &&
+      deliveryCount >= minimumDeliveryCount &&
+      upgradeCount >= minimumUpgradeCount;
+
+  WoodcuttingOpeningProgress copyWith({
+    double? activeSeconds,
+    double? cash,
+    int? carriedLogs,
+    int? logsDelivered,
+    int? deliveryCount,
+    bool? hasSharpChainUpgrade,
+    bool? hasEngineUpgrade,
+  }) => WoodcuttingOpeningProgress(
+    activeSeconds: activeSeconds ?? this.activeSeconds,
+    cash: cash ?? this.cash,
+    carriedLogs: carriedLogs ?? this.carriedLogs,
+    logsDelivered: logsDelivered ?? this.logsDelivered,
+    deliveryCount: deliveryCount ?? this.deliveryCount,
+    hasSharpChainUpgrade: hasSharpChainUpgrade ?? this.hasSharpChainUpgrade,
+    hasEngineUpgrade: hasEngineUpgrade ?? this.hasEngineUpgrade,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'activeSeconds': activeSeconds,
+    'cash': cash,
+    'carriedLogs': carriedLogs,
+    'logsDelivered': logsDelivered,
+    'deliveryCount': deliveryCount,
+    'hasSharpChainUpgrade': hasSharpChainUpgrade,
+    'hasEngineUpgrade': hasEngineUpgrade,
+  };
+
+  factory WoodcuttingOpeningProgress.fromJson(Map<String, dynamic> json) =>
+      WoodcuttingOpeningProgress(
+        activeSeconds: (json['activeSeconds'] as num?)?.toDouble() ?? 0,
+        cash: (json['cash'] as num?)?.toDouble() ?? 140,
+        carriedLogs: json['carriedLogs'] as int? ?? 0,
+        logsDelivered: json['logsDelivered'] as int? ?? 0,
+        deliveryCount: json['deliveryCount'] as int? ?? 0,
+        hasSharpChainUpgrade: json['hasSharpChainUpgrade'] as bool? ?? false,
+        hasEngineUpgrade: json['hasEngineUpgrade'] as bool? ?? false,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is WoodcuttingOpeningProgress &&
+      other.activeSeconds == activeSeconds &&
+      other.cash == cash &&
+      other.carriedLogs == carriedLogs &&
+      other.logsDelivered == logsDelivered &&
+      other.deliveryCount == deliveryCount &&
+      other.hasSharpChainUpgrade == hasSharpChainUpgrade &&
+      other.hasEngineUpgrade == hasEngineUpgrade;
+
+  @override
+  int get hashCode => Object.hash(
+    activeSeconds,
+    cash,
+    carriedLogs,
+    logsDelivered,
+    deliveryCount,
+    hasSharpChainUpgrade,
+    hasEngineUpgrade,
+  );
+}
+
 class OpeningSessionState {
   const OpeningSessionState({
     this.farmCredits = 0,
@@ -79,6 +172,9 @@ class OpeningSessionState {
     this.worldLogisticsLinks = const <WorldLogisticsLink>[],
     this.buildings = const <FarmBuildingInstance>[],
     this.equipmentStarterKitGranted = false,
+    this.hasCompletedWoodcuttingOpening = false,
+    this.hasCompletedWoodcuttingStory = false,
+    this.woodcuttingOpeningProgress = const WoodcuttingOpeningProgress(),
     this.ownedEquipmentIds = const <String>{},
     this.equippedEquipmentByOperation = const <String, String>{},
     this.farmTutorialStep = FarmTutorialStep.story,
@@ -189,7 +285,7 @@ class OpeningSessionState {
   /// Persisted market, contract, processing and livestock runtime state.
   final String? farmSystemsJson;
 
-  /// Seed for the infinite deterministic world-map generator.
+  /// Seed for the finite deterministic world-map generator.
   final int worldSeed;
 
   /// Preserves parcel IDs for saves made before the versioned terrain update.
@@ -206,6 +302,15 @@ class OpeningSessionState {
 
   /// Whether the original, complete grain-equipment pack has been granted.
   final bool equipmentStarterKitGranted;
+
+  /// Whether the player has completed the one-time woodcutting opening hook.
+  final bool hasCompletedWoodcuttingOpening;
+
+  /// Whether the player has read the inherited-farm story after the hook.
+  final bool hasCompletedWoodcuttingStory;
+
+  /// Resumable progress for the woodcutting opening loop.
+  final WoodcuttingOpeningProgress woodcuttingOpeningProgress;
 
   /// Equipment owned by the farm, stored by stable catalogue ID.
   final Set<String> ownedEquipmentIds;
@@ -264,6 +369,9 @@ class OpeningSessionState {
     List<WorldLogisticsLink>? worldLogisticsLinks,
     List<FarmBuildingInstance>? buildings,
     bool? equipmentStarterKitGranted,
+    bool? hasCompletedWoodcuttingOpening,
+    bool? hasCompletedWoodcuttingStory,
+    WoodcuttingOpeningProgress? woodcuttingOpeningProgress,
     Set<String>? ownedEquipmentIds,
     Map<String, String>? equippedEquipmentByOperation,
     FarmTutorialStep? farmTutorialStep,
@@ -320,6 +428,12 @@ class OpeningSessionState {
       buildings: buildings ?? this.buildings,
       equipmentStarterKitGranted:
           equipmentStarterKitGranted ?? this.equipmentStarterKitGranted,
+      hasCompletedWoodcuttingOpening:
+          hasCompletedWoodcuttingOpening ?? this.hasCompletedWoodcuttingOpening,
+      hasCompletedWoodcuttingStory:
+          hasCompletedWoodcuttingStory ?? this.hasCompletedWoodcuttingStory,
+      woodcuttingOpeningProgress:
+          woodcuttingOpeningProgress ?? this.woodcuttingOpeningProgress,
       ownedEquipmentIds: ownedEquipmentIds ?? this.ownedEquipmentIds,
       equippedEquipmentByOperation:
           equippedEquipmentByOperation ?? this.equippedEquipmentByOperation,
@@ -373,12 +487,18 @@ class OpeningSessionState {
         .toList(),
     'buildings': buildings.map((building) => building.toJson()).toList(),
     'equipmentStarterKitGranted': equipmentStarterKitGranted,
+    'hasCompletedWoodcuttingOpening': hasCompletedWoodcuttingOpening,
+    'hasCompletedWoodcuttingStory': hasCompletedWoodcuttingStory,
+    'woodcuttingOpeningProgress': woodcuttingOpeningProgress.toJson(),
     'ownedEquipmentIds': ownedEquipmentIds.toList()..sort(),
     'equippedEquipmentByOperation': equippedEquipmentByOperation,
     'farmTutorialStep': farmTutorialStep.name,
   };
 
   factory OpeningSessionState.fromJson(Map<String, dynamic> json) {
+    final rawWoodcuttingProgress = json['woodcuttingOpeningProgress'];
+    final hasWoodcuttingProgress =
+        rawWoodcuttingProgress is Map<String, dynamic>;
     final ownedParcelIds =
         (json['ownedWorldParcelIds'] as List<dynamic>? ?? const [])
             .whereType<String>()
@@ -470,6 +590,14 @@ class OpeningSessionState {
           .toList(),
       equipmentStarterKitGranted:
           json['equipmentStarterKitGranted'] as bool? ?? false,
+      hasCompletedWoodcuttingOpening:
+          hasWoodcuttingProgress &&
+          (json['hasCompletedWoodcuttingOpening'] as bool? ?? false),
+      hasCompletedWoodcuttingStory:
+          json['hasCompletedWoodcuttingStory'] as bool? ?? false,
+      woodcuttingOpeningProgress: hasWoodcuttingProgress
+          ? WoodcuttingOpeningProgress.fromJson(rawWoodcuttingProgress)
+          : const WoodcuttingOpeningProgress(),
       ownedEquipmentIds:
           (json['ownedEquipmentIds'] as List<dynamic>? ?? const [])
               .whereType<String>()
@@ -530,6 +658,10 @@ class OpeningSessionState {
         ) &&
         _farmBuildingsEqual(other.buildings, buildings) &&
         other.equipmentStarterKitGranted == equipmentStarterKitGranted &&
+        other.hasCompletedWoodcuttingOpening ==
+            hasCompletedWoodcuttingOpening &&
+        other.hasCompletedWoodcuttingStory == hasCompletedWoodcuttingStory &&
+        other.woodcuttingOpeningProgress == woodcuttingOpeningProgress &&
         _stringSetsEqual(other.ownedEquipmentIds, ownedEquipmentIds) &&
         _stringMapsEqual(
           other.equippedEquipmentByOperation,
@@ -578,6 +710,9 @@ class OpeningSessionState {
     Object.hashAll(worldLogisticsLinks),
     Object.hashAll(buildings),
     equipmentStarterKitGranted,
+    hasCompletedWoodcuttingOpening,
+    hasCompletedWoodcuttingStory,
+    woodcuttingOpeningProgress,
     Object.hashAll(ownedEquipmentIds.toList()..sort()),
     Object.hashAll(
       equippedEquipmentByOperation.entries.toList()
@@ -760,6 +895,21 @@ class OpeningSession {
   }
 
   OpeningSessionState _state;
+  ProceduralFarmWorld? _routePlanningWorld;
+
+  ProceduralFarmWorld get _roadRoutePlanner =>
+      _routePlanningWorld ??= ProceduralFarmWorld(
+        seed: _state.worldSeed,
+        generationVersion: max(
+          ProceduralFarmWorld.currentGenerationVersion,
+          _state.worldGenerationVersion,
+        ).toInt(),
+        legacyGenerationVersion: _state.worldGenerationVersion,
+        preservedParcelIds: {
+          ..._state.ownedWorldParcelIds,
+          ...plots.map((plot) => plot.mapParcelId).whereType<String>(),
+        },
+      );
   OpeningSessionState? _plotsCacheState;
   List<CropPlotState> _plotsCache = const [];
   Map<int, CropPlotState> _plotsByIdCache = const {};
@@ -900,6 +1050,14 @@ class OpeningSession {
   );
 
   FarmTutorialStep get tutorialStep => _state.farmTutorialStep;
+
+  bool get hasCompletedWoodcuttingOpening =>
+      _state.hasCompletedWoodcuttingOpening;
+
+  bool get hasCompletedWoodcuttingStory => _state.hasCompletedWoodcuttingStory;
+
+  WoodcuttingOpeningProgress get woodcuttingOpeningProgress =>
+      _state.woodcuttingOpeningProgress;
 
   bool get isFarmTutorialComplete =>
       _state.farmTutorialStep == FarmTutorialStep.complete;
@@ -1218,6 +1376,24 @@ class OpeningSession {
   void setFarmTutorialStep(FarmTutorialStep step) {
     if (_state.farmTutorialStep == step) return;
     _state = _state.copyWith(farmTutorialStep: step);
+  }
+
+  void completeWoodcuttingOpening() {
+    if (_state.hasCompletedWoodcuttingOpening ||
+        !_state.woodcuttingOpeningProgress.meetsCompletionRequirements) {
+      return;
+    }
+    _state = _state.copyWith(hasCompletedWoodcuttingOpening: true);
+  }
+
+  void updateWoodcuttingOpeningProgress(WoodcuttingOpeningProgress progress) {
+    if (_state.hasCompletedWoodcuttingOpening) return;
+    _state = _state.copyWith(woodcuttingOpeningProgress: progress);
+  }
+
+  void completeWoodcuttingStory() {
+    if (_state.hasCompletedWoodcuttingStory) return;
+    _state = _state.copyWith(hasCompletedWoodcuttingStory: true);
   }
 
   bool get isFarmTutorialActive => !isFarmTutorialComplete;
@@ -2621,8 +2797,10 @@ class OpeningSession {
       positionX: -165,
       positionY: -175,
       areaSquareMeters: 1000,
-      mapX: -300,
-      mapY: -235,
+      // Place the starter plot north of the home compound. The 44 m gap to
+      // the compound and 34 m gap to the eastern field keep both footprints clear.
+      mapX: -150,
+      mapY: -250,
       mapWidth: 104,
       mapHeight: 70,
       mapParcelId: 'home-field-0',
@@ -3504,6 +3682,7 @@ class OpeningSession {
     int? amountPerTrip,
     String? vehicleId,
     bool repeatRoute = false,
+    List<RouteWaypoint>? outboundRoadPath,
   }) {
     if (_state.stage != OpeningStage.management || !_state.hasStarterTruck) {
       return false;
@@ -3551,6 +3730,16 @@ class OpeningSession {
                 amountPerTrip > selectedVehicle.effectiveCapacity))) {
       return false;
     }
+    final roadPath =
+        outboundRoadPath ??
+        _roadRoutePlanner
+            .findRoadRoute(
+              WorldMapPoint(fieldX, fieldY),
+              const WorldMapPoint(starterMarketMapX, starterMarketMapY),
+            )
+            ?.map((point) => RouteWaypoint(point.x, point.y))
+            .toList(growable: false);
+    if (roadPath == null || roadPath.length < 2) return false;
     fleetManager.startStarterMarketRoute(
       fieldX: fieldX,
       fieldY: fieldY,
@@ -3560,6 +3749,7 @@ class OpeningSession {
       isOneShot: !repeatRoute,
       contractId: activeContract?.id,
       vehicleId: selectedVehicle.id,
+      outboundRoadPath: roadPath,
     );
     if (_state.farmTutorialStep == FarmTutorialStep.deliveryRoute) {
       _state = _state.copyWith(farmTutorialStep: FarmTutorialStep.delivery);

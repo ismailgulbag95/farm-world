@@ -2,20 +2,26 @@
 
 ## Goal
 
-This vertical slice turns the former fixed 900×620 management view into a mobile map that can be explored in any direction. It uses a fictional, deterministic world. The visual language takes cues from [Scribble Maps' agriculture maps](https://www.scribblemaps.com/tr/sektorler/tar%C4%B1m): colored field shapes, separate infrastructure/route layers, field details and map measurement tools, rendered over the game's illustrated forest terrain.
+This vertical slice turns the former fixed 900×620 management view into a mobile map that can be explored by dragging and zooming inside a finite world. It uses a fictional, deterministic world. The visual language takes cues from [Scribble Maps' agriculture maps](https://www.scribblemaps.com/tr/sektorler/tar%C4%B1m): colored field shapes, separate infrastructure/route layers, field details and map measurement tools, rendered over the game's illustrated forest terrain.
 
 ## World generation
 
-- `ProceduralFarmWorld` derives each 640 m chunk from the save's `worldSeed`. Only visible chunks are generated and retained in a small cache.
-- The map has no authored edge or preallocated canvas. Panning or entering a coordinate generates the same terrain and offers for that seed and coordinate.
+- `ProceduralFarmWorld` derives each 640 m chunk from the save's `worldSeed`. Only visible chunks are generated on demand and retained in a bounded cache.
+- The map contains 27×27 chunks: 17.28 km on each axis, from approximately −8,320 m to 8,960 m. Panning or searching within those bounds generates the same terrain and offers for that seed and coordinate.
 - Every 8×8 chunk district gets a deterministic agricultural hub. Parcel offers become denser and more fertile near hubs, while the space between hubs remains forest with occasional isolated offers.
+- The current settlement generation places road-connected villages across the map in addition to the district hubs. Nearby parcel clusters are denser and use tighter spacing; settlement clearances keep their buildings separate from fields.
 - A parcel offer has a stable ID, crop/pasture type, area, fertility and price. The price includes a local-density premium; generated remote parcels usually cost less.
 - Forest canopies, occasional ponds, villages, mills, water points, timber yards and long-distance dirt-road corridors are decorative map features. They are generated from the same seed.
+
+## Opening and landmarks
+
+- The opening story introduces Akpınar, the inherited starter field and Ayla Demirsoy. The guided tutorial validates each farm operation on that field, then guides the player through storage, the first delivery, equipment and farm management.
+- Farmstead buildings, settlement houses, town halls and market stalls are ThreeJS models. Windmill rotors and market pennants animate while visible; house locations stay deterministic as the camera moves.
 
 ## Player actions
 
 - Drag with one finger to pan; pinch to zoom; use the map buttons for zoom and recenter.
-- Open coordinate search to move to an arbitrary X/Y location. Coordinates are in meters and are accepted within ±1 trillion meters.
+- Open coordinate search to move to an X/Y location inside the map bounds. Coordinates are in meters.
 - Tap a visible parcel for its area, crop type, soil score and price. Buy it if the current ÇK balance covers the full price.
 - Choose **Hat kur**, tap an owned starting parcel and then another owned parcel. The quote shows straight-line distance and construction cost before charging the player.
 - Use **Mesafe ölç** to measure between two map points.

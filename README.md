@@ -1,14 +1,14 @@
 # Farm World
 
-Farm World is a mobile-first farm management game built with Flutter and Flame. The current prototype opens on a seed-based, practically unbounded forest-and-farmland map. The opening hand-mowing phase is skipped so the world-map loop can be explored immediately.
+Farm World is a mobile-first farm management game built with Flutter and Flame. A new session opens with a short, playable woodcutting shift: drive through the South Forest, cut trees, collect logs and deliver the first load. A letter then brings the young woodcutter back to the inherited Akpınar farm, its land and its starter equipment. From there the game continues on a seed-based forest-and-farmland world made of 27×27 chunks. Each 640 m chunk makes the map 17.28 km wide and high; visible chunks are generated as the player explores.
 
 ## World map prototype
 
-- Explore by dragging and pinching. Search directly by world coordinates when you want to jump far away.
+- Explore within the finite map by dragging and pinching. Search by world coordinates to move to another location inside its bounds.
 - Select generated agricultural parcels to inspect crop type, area, soil fertility and price; purchase land with ÇK.
 - Build a costed, persistent logistics corridor between two owned parcels.
 - Toggle field, route, infrastructure and fertility layers; use the distance tool to inspect remote locations.
-- Map chunks and unmodified offers are regenerated from the saved world seed instead of being stored as a giant map.
+- Visible map chunks are generated on demand; unmodified terrain and parcel offers are reproducible from the saved world seed instead of being stored as a giant map.
 
 See [the world-map prototype notes](docs/procedural-world-map-prototype.md) for generation rules and the current feature boundary.
 

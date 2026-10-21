@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../domain/crop_plot.dart';
+import '../domain/debug_action_controller.dart';
 import '../domain/farm_progression_and_finance.dart';
 import '../domain/opening_session.dart';
 
@@ -370,10 +371,12 @@ class _LivestockPanel extends StatelessWidget {
             ),
             value: pasture.isPastureGrazingEnabled,
             onChanged: hasAnimals
-                ? (enabled) {
-                    session.setPastureGrazing(enabled);
-                    onChanged();
-                  }
+                ? (enabled) => unawaited(
+                    DebugActionController.instance.runPlayerAction<void>(() {
+                      session.setPastureGrazing(enabled);
+                      onChanged();
+                    }),
+                  )
                 : null,
           ),
         ),
@@ -542,7 +545,7 @@ class _CompostPanel extends StatelessWidget {
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: transferableBales >= transferCount
-                        ? () {
+                        ? DebugActionController.instance.actionCallback(() {
                             final added = session.addGrassToCompost(
                               transferCount,
                             );
@@ -553,7 +556,7 @@ class _CompostPanel extends StatelessWidget {
                                   : 'Balya aktarılamadı.',
                             );
                             if (added) onChanged();
-                          }
+                          })
                         : null,
                     icon: const Icon(Icons.move_down_rounded),
                     label: const Text('Tesise aktar'),
@@ -737,7 +740,11 @@ class _ProgressRewardCard extends StatelessWidget {
               child: isClaimed
                   ? const _ClaimedLabel()
                   : FilledButton.tonal(
-                      onPressed: isComplete ? onClaim : null,
+                      onPressed: isComplete
+                          ? DebugActionController.instance.actionCallback(
+                              onClaim,
+                            )
+                          : null,
                       child: Text(
                         isComplete ? actionLabel : 'İlerleme sürüyor',
                       ),
@@ -807,11 +814,19 @@ class _AnimalPurchaseCard extends StatelessWidget {
             Column(
               children: [
                 TextButton(
-                  onPressed: canBuyOne ? () => onBuy(1) : null,
+                  onPressed: canBuyOne
+                      ? DebugActionController.instance.actionCallback(
+                          () => onBuy(1),
+                        )
+                      : null,
                   child: const Text('+1'),
                 ),
                 TextButton(
-                  onPressed: canBuyFive ? () => onBuy(5) : null,
+                  onPressed: canBuyFive
+                      ? DebugActionController.instance.actionCallback(
+                          () => onBuy(5),
+                        )
+                      : null,
                   child: const Text('+5'),
                 ),
               ],
@@ -1017,7 +1032,11 @@ class _ActionCard extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.tonal(
-                      onPressed: enabled ? onPressed : null,
+                      onPressed: enabled
+                          ? DebugActionController.instance.actionCallback(
+                              onPressed,
+                            )
+                          : null,
                       child: Text(actionLabel),
                     ),
                   ),

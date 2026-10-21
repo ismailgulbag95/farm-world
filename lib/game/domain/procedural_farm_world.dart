@@ -1,8 +1,8 @@
 import 'dart:math';
 import 'dart:ui' show Offset, Rect;
 
-/// World-map scale. A chunk is generated independently, so camera travel does
-/// not depend on a preallocated world rectangle.
+/// World-map scale. Chunks are generated on demand within the finite bounds
+/// declared by [ProceduralFarmWorld].
 const double farmWorldChunkSize = 640;
 
 enum WorldCropType { grain, oilseed, vegetable, pasture }
@@ -469,8 +469,8 @@ class WorldLogisticsLink {
   );
 }
 
-/// Deterministic, practically unbounded map. Only visited chunks are generated
-/// and cached; the same seed and coordinate always produce the same land offers.
+/// Deterministic, finite map. Visible chunks are generated and cached on demand;
+/// the same seed and coordinate always produce the same land offers.
 class ProceduralFarmWorld {
   ProceduralFarmWorld({
     this.seed = defaultSeed,
@@ -493,8 +493,9 @@ class ProceduralFarmWorld {
   static const int geographicRedesignGenerationVersion = 4;
   static const int collisionSafeGenerationVersion = 5;
   static const int parcelBoundarySafeGenerationVersion = 6;
+  static const int settlementDensityGenerationVersion = 7;
   static const int currentGenerationVersion =
-      parcelBoundarySafeGenerationVersion;
+      settlementDensityGenerationVersion;
   static const double _lakeFieldBankBufferMeters = 180;
   static const double _lakeRoadBankBufferMeters = 180;
   static const double _pondFieldBankBufferMeters = 110;
@@ -505,9 +506,7 @@ class ProceduralFarmWorld {
   static const int chunksPerDistrict = 8;
   static const double districtSize = farmWorldChunkSize * chunksPerDistrict;
 
-  /// Finite world bounds for optimized performance and memory safety.
-  /// 27x27 chunks (~17.28 km x 17.28 km) provides a vast area (3x original map)
-  /// for exploration, trade routes, and farm expansion.
+  /// The authoritative finite world extent: 27 × 27 chunks, or 17.28 km square.
   static const int minChunkX = -13;
   static const int maxChunkX = 13;
   static const int minChunkY = -13;
@@ -1028,43 +1027,295 @@ class ProceduralFarmWorld {
     final lastY = (worldMaxY / districtSize).floor();
     for (var y = firstY; y <= lastY; y++) {
       for (var x = firstX; x <= lastX; x++) {
-        final position = _settlementPositionForDistrict(x, y);
-        if (position == null) continue;
-        if (position.x < worldMinX - 500 ||
-            position.x > worldMaxX + 500 ||
-            position.y < worldMinY - 500 ||
-            position.y > worldMaxY + 500) {
-          continue;
-        }
-        final kind = _settlementKindForDistrict(x, y);
-        final road = _nearestRoadAt(
-          position,
-          searchRadius: _settlementKeepoutRadius(kind) + 260,
-        );
-        if (generationVersion >= collisionSafeGenerationVersion &&
-            road == null) {
-          continue;
-        }
-        final isCity = x == 0 && y == 0;
-        result.add(
-          WorldMapSettlement(
-            id: isCity ? 'settlement:market-city' : 'settlement:$x:$y',
-            name: isCity ? 'Akpınar' : _settlementName(x, y, kind),
-            kind: kind,
-            position: position,
-            population: switch (kind) {
-              WorldMapSettlementKind.city => 18400,
-              WorldMapSettlementKind.town => 2400,
-              WorldMapSettlementKind.village => 540,
-              WorldMapSettlementKind.hamlet => 120,
-            },
-            roadId: road?.id,
-          ),
-        );
+        final settlement = _primarySettlementForDistrict(x, y);
+        if (settlement != null) result.add(settlement);
       }
     }
+    result.addAll(_supplementalVillagesFor(result));
     _settlementsCache = List.unmodifiable(result);
     return _settlementsCache!;
+  }
+
+  /// Generates only settlements near the requested world-space viewport.
+  /// The complete [settlements] list remains available for world-wide queries.
+  List<WorldMapSettlement> settlementsInBounds(Rect bounds) {
+    final cached = _settlementsCache;
+    if (cached != null) {
+      return cached
+          .where((settlement) => _settlementOverlapsBounds(settlement, bounds))
+          .toList(growable: false);
+    }
+
+    final queryBounds = bounds.inflate(420).intersect(worldBounds);
+    if (queryBounds.isEmpty) return const [];
+    final minDistrictX = (worldMinX / districtSize).floor();
+    final maxDistrictX = (worldMaxX / districtSize).floor();
+    final minDistrictY = (worldMinY / districtSize).floor();
+    final maxDistrictY = (worldMaxY / districtSize).floor();
+    final firstX = (queryBounds.left / districtSize)
+        .floor()
+        .clamp(minDistrictX, maxDistrictX)
+        .toInt();
+    final lastX = (queryBounds.right / districtSize)
+        .floor()
+        .clamp(minDistrictX, maxDistrictX)
+        .toInt();
+    final firstY = (queryBounds.top / districtSize)
+        .floor()
+        .clamp(minDistrictY, maxDistrictY)
+        .toInt();
+    final lastY = (queryBounds.bottom / districtSize)
+        .floor()
+        .clamp(minDistrictY, maxDistrictY)
+        .toInt();
+
+    final visible = <WorldMapSettlement>[];
+    final visiblePrimary = <WorldMapSettlement>[];
+    for (var y = firstY; y <= lastY; y++) {
+      for (var x = firstX; x <= lastX; x++) {
+        final primary = _primarySettlementForDistrict(
+          x,
+          y,
+          visibleBounds: queryBounds,
+        );
+        if (primary != null &&
+            _settlementOverlapsBounds(primary, queryBounds)) {
+          visible.add(primary);
+          visiblePrimary.add(primary);
+        }
+      }
+    }
+
+    // Use settlements already in this area for spacing. Don't generate a road
+    // network for every neighboring district just to place village satellites.
+    final occupiedPrimary = <WorldMapSettlement>{
+      ..._primarySettlementsByDistrict.values.whereType<WorldMapSettlement>(),
+      ...visiblePrimary,
+    }.toList(growable: false);
+    for (var y = firstY; y <= lastY; y++) {
+      for (var x = firstX; x <= lastX; x++) {
+        final supplemental = _supplementalVillageForDistrict(
+          x,
+          y,
+          occupiedPrimary,
+          visibleBounds: queryBounds,
+        );
+        if (supplemental != null &&
+            _settlementOverlapsBounds(supplemental, queryBounds)) {
+          visible.add(supplemental);
+        }
+      }
+    }
+    return List.unmodifiable(visible);
+  }
+
+  bool _settlementOverlapsBounds(WorldMapSettlement settlement, Rect bounds) {
+    return _settlementPositionOverlapsBounds(
+      settlement.position,
+      settlement.kind,
+      bounds,
+    );
+  }
+
+  bool _settlementPositionOverlapsBounds(
+    WorldMapPoint position,
+    WorldMapSettlementKind kind,
+    Rect bounds,
+  ) {
+    final radius = _settlementKeepoutRadius(kind);
+    return bounds.inflate(radius).contains(Offset(position.x, position.y));
+  }
+
+  WorldMapSettlement? _primarySettlementForDistrict(
+    int x,
+    int y, {
+    Rect? visibleBounds,
+  }) {
+    final key = '$x:$y';
+    if (_primarySettlementsByDistrict.containsKey(key)) {
+      return _primarySettlementsByDistrict[key];
+    }
+    final wasBuildingPrimary = _buildingPrimarySettlements;
+    _buildingPrimarySettlements = true;
+    try {
+      final position = _settlementPositionForDistrict(x, y);
+      if (position == null ||
+          position.x < worldMinX - 500 ||
+          position.x > worldMaxX + 500 ||
+          position.y < worldMinY - 500 ||
+          position.y > worldMaxY + 500) {
+        _primarySettlementsByDistrict[key] = null;
+        return null;
+      }
+      final kind = _settlementKindForDistrict(x, y);
+      if (visibleBounds != null &&
+          !_settlementPositionOverlapsBounds(position, kind, visibleBounds)) {
+        return null;
+      }
+      final road = _nearestRoadAt(
+        position,
+        searchRadius: _settlementKeepoutRadius(kind) + 260,
+      );
+      if (generationVersion >= collisionSafeGenerationVersion && road == null) {
+        _primarySettlementsByDistrict[key] = null;
+        return null;
+      }
+      final isCity = x == 0 && y == 0;
+      final settlement = WorldMapSettlement(
+        id: isCity ? 'settlement:market-city' : 'settlement:$x:$y',
+        name: isCity ? 'Akpınar' : _settlementName(x, y, kind),
+        kind: kind,
+        position: position,
+        population: switch (kind) {
+          WorldMapSettlementKind.city => 18400,
+          WorldMapSettlementKind.town => 2400,
+          WorldMapSettlementKind.village => 540,
+          WorldMapSettlementKind.hamlet => 120,
+        },
+        roadId: road?.id,
+      );
+      _primarySettlementsByDistrict[key] = settlement;
+      return settlement;
+    } finally {
+      _buildingPrimarySettlements = wasBuildingPrimary;
+    }
+  }
+
+  WorldMapSettlement? _supplementalVillageForDistrict(
+    int x,
+    int y,
+    List<WorldMapSettlement> primarySettlements, {
+    Rect? visibleBounds,
+  }) {
+    if (generationVersion < settlementDensityGenerationVersion) return null;
+    final key = '$x:$y';
+    if (_supplementalSettlementsByDistrict.containsKey(key)) {
+      return _supplementalSettlementsByDistrict[key];
+    }
+    if (_buildingSupplementalSettlements) return null;
+
+    final wasBuildingSupplemental = _buildingSupplementalSettlements;
+    _buildingSupplementalSettlements = true;
+    try {
+      final origin = _settlementPositionForDistrict(x, y);
+      if (origin == null) {
+        _supplementalSettlementsByDistrict[key] = null;
+        return null;
+      }
+      final occupied = <WorldMapSettlement>[
+        ...primarySettlements,
+        ..._supplementalSettlementsByDistrict.values
+            .whereType<WorldMapSettlement>(),
+      ];
+      final rotation = _stableHash('$seed|village-satellite|$x|$y') % 8;
+      final viableCandidates = <WorldMapPoint>[];
+      var hasUnexaminedCandidates = false;
+      for (var step = 0; step < 8; step++) {
+        final angle = (step + rotation) * pi / 4;
+        final distance = const [1200.0, 1760.0, 2200.0][step % 3];
+        final candidate = WorldMapPoint(
+          origin.x + cos(angle) * distance,
+          origin.y + sin(angle) * distance,
+        );
+        if (!_insideDistrictCell(candidate, x, y) ||
+            candidate.x < worldMinX + 250 ||
+            candidate.x > worldMaxX - 250 ||
+            candidate.y < worldMinY + 250 ||
+            candidate.y > worldMaxY - 250) {
+          continue;
+        }
+        if (visibleBounds != null &&
+            !_settlementPositionOverlapsBounds(
+              candidate,
+              WorldMapSettlementKind.village,
+              visibleBounds,
+            )) {
+          hasUnexaminedCandidates = true;
+          continue;
+        }
+        if (_pointBlockedByRelief(candidate, margin: 330) ||
+            _pointBlockedByProtectedParcel(candidate, 330) ||
+            occupied.any((settlement) {
+              final minDistance =
+                  _settlementKeepoutRadius(settlement.kind) +
+                  _settlementKeepoutRadius(WorldMapSettlementKind.village) +
+                  260;
+              return candidate.distanceTo(settlement.position) < minDistance;
+            })) {
+          continue;
+        }
+        viableCandidates.add(candidate);
+      }
+
+      final candidatesToCheck = visibleBounds == null
+          ? viableCandidates
+          : viableCandidates
+                .where(
+                  (candidate) => _settlementPositionOverlapsBounds(
+                    candidate,
+                    WorldMapSettlementKind.village,
+                    visibleBounds,
+                  ),
+                )
+                .toList(growable: false);
+      if (candidatesToCheck.isEmpty) {
+        if (viableCandidates.isEmpty && !hasUnexaminedCandidates) {
+          _supplementalSettlementsByDistrict[key] = null;
+        }
+        return null;
+      }
+
+      WorldMapSettlement? village;
+      for (final candidate in candidatesToCheck.take(2)) {
+        final (road, roadDistance) = _nearestRoadMeasurementAt(
+          candidate,
+          searchRadius: 760,
+        );
+        if (road == null || roadDistance < 115) continue;
+        village = WorldMapSettlement(
+          id: 'settlement:village:$x:$y',
+          name: _settlementName(x + 37, y - 29, WorldMapSettlementKind.village),
+          kind: WorldMapSettlementKind.village,
+          position: candidate,
+          population: 540,
+          roadId: road.id,
+        );
+        break;
+      }
+      if (village != null || visibleBounds == null) {
+        _supplementalSettlementsByDistrict[key] = village;
+      }
+      return village;
+    } finally {
+      _buildingSupplementalSettlements = wasBuildingSupplemental;
+    }
+  }
+
+  List<WorldMapSettlement> _supplementalVillagesFor(
+    List<WorldMapSettlement> primarySettlements,
+  ) {
+    if (generationVersion < settlementDensityGenerationVersion) {
+      return const [];
+    }
+    final cached = _supplementalSettlementsCache;
+    if (cached != null) return cached;
+    final villages = <WorldMapSettlement>[];
+    final firstX = (worldMinX / districtSize).floor();
+    final lastX = (worldMaxX / districtSize).floor();
+    final firstY = (worldMinY / districtSize).floor();
+    final lastY = (worldMaxY / districtSize).floor();
+    for (var y = firstY; y <= lastY; y++) {
+      for (var x = firstX; x <= lastX; x++) {
+        final village = _supplementalVillageForDistrict(
+          x,
+          y,
+          primarySettlements,
+        );
+        if (village != null) villages.add(village);
+      }
+    }
+    _supplementalSettlementsCache = List.unmodifiable(villages);
+    return _supplementalSettlementsCache!;
   }
 
   List<WorldMapBridge> bridgesInBounds(Rect bounds) {
@@ -1090,7 +1341,9 @@ class ProceduralFarmWorld {
       for (final watercourse in candidateWatercourses) {
         final watercourseBounds = _boundsOfPoints(watercourse.points);
         if (!roadBounds.overlaps(
-          watercourseBounds.inflate(road.width / 2 + watercourse.width / 2 + 12),
+          watercourseBounds.inflate(
+            road.width / 2 + watercourse.width / 2 + 12,
+          ),
         )) {
           continue;
         }
@@ -1115,7 +1368,9 @@ class ProceduralFarmWorld {
               waterEnd,
             );
             if (intersection == null ||
-                !bounds.inflate(30).contains(Offset(intersection.x, intersection.y)) ||
+                !bounds
+                    .inflate(30)
+                    .contains(Offset(intersection.x, intersection.y)) ||
                 result.any(
                   (bridge) =>
                       bridge.roadId == road.id &&
@@ -1148,10 +1403,13 @@ class ProceduralFarmWorld {
     final result = <WorldMapBridge>[];
     for (final watercourse in watercourses) {
       if (watercourse.type == WorldMapWatercourseType.irrigationCanal) continue;
-      final wBounds = _boundsOfPoints(watercourse.points).inflate(watercourse.width + 50);
+      final wBounds = _boundsOfPoints(watercourse.points)
+          .inflate(watercourse.width + 50);
       final found = bridgesInBounds(wBounds);
       for (final b in found) {
-        if (!result.any((existing) => existing.position.distanceTo(b.position) < 50)) {
+        if (!result.any(
+          (existing) => existing.position.distanceTo(b.position) < 50,
+        )) {
           result.add(b);
         }
       }
@@ -1173,6 +1431,34 @@ class ProceduralFarmWorld {
       chunkY >= minChunkY &&
       chunkY <= maxChunkY;
 
+  /// Gets overview POIs without constructing parcel, tree, and mountain data
+  /// for every visible chunk.
+  List<WorldMapPointOfInterest> pointsOfInterestInBounds(Rect bounds) {
+    final visibleBounds = bounds.intersect(worldBounds);
+    if (visibleBounds.isEmpty) return const [];
+
+    final firstChunkX = (visibleBounds.left / farmWorldChunkSize).floor().clamp(
+      minChunkX,
+      maxChunkX,
+    );
+    final lastChunkX = (visibleBounds.right / farmWorldChunkSize).floor().clamp(
+      minChunkX,
+      maxChunkX,
+    );
+    final firstChunkY = (visibleBounds.top / farmWorldChunkSize).floor().clamp(
+      minChunkY,
+      maxChunkY,
+    );
+    final lastChunkY = (visibleBounds.bottom / farmWorldChunkSize)
+        .floor()
+        .clamp(minChunkY, maxChunkY);
+    return List.unmodifiable([
+      for (var y = firstChunkY; y <= lastChunkY; y++)
+        for (var x = firstChunkX; x <= lastChunkX; x++)
+          if (isChunkInBounds(x, y)) ..._pointsOfInterestForChunk(x, y),
+    ]);
+  }
+
   final int seed;
   final int generationVersion;
   final int preservedParcelGenerationVersion;
@@ -1186,9 +1472,15 @@ class ProceduralFarmWorld {
   final Map<String, WorldMapPointOfInterest?> _pointOfInterestPlacementCache =
       {};
   final Map<String, WorldMapPoint> _settlementPositionCache = {};
+  final Map<String, WorldMapSettlement?> _primarySettlementsByDistrict = {};
+  final Map<String, WorldMapSettlement?> _supplementalSettlementsByDistrict =
+      {};
   final Map<String, WorldMapPoint> _districtHubCache = {};
   final Set<String> _unavailableSettlementKeys = {};
   List<WorldMapSettlement>? _settlementsCache;
+  List<WorldMapSettlement>? _supplementalSettlementsCache;
+  bool _buildingPrimarySettlements = false;
+  bool _buildingSupplementalSettlements = false;
   List<WorldMapBridge>? _bridgesCache;
   List<WorldMapParcel>? _preservedParcelCache;
   List<WorldMapParcel>? _protectedParcelCache;
@@ -1268,9 +1560,16 @@ class ProceduralFarmWorld {
     }
 
     final key = '$chunkX:$chunkY';
-    final cached = _chunkCache[key];
-    if (cached != null) return cached;
-    if (_chunkCache.length > 384) _chunkCache.clear();
+    final cached = _chunkCache.remove(key);
+    if (cached != null) {
+      // Preserve recently revisited chunks instead of invalidating all cache
+      // entries at once when exploration passes the capacity limit.
+      _chunkCache[key] = cached;
+      return cached;
+    }
+    if (_chunkCache.length >= 384) {
+      _chunkCache.remove(_chunkCache.keys.first);
+    }
 
     final random = Random(_stableHash('$seed|chunk|$chunkX|$chunkY'));
     if (generationVersion >= clusteredMountainGenerationVersion) {
@@ -1768,6 +2067,35 @@ class ProceduralFarmWorld {
       ));
     }
 
+    if (generationVersion >= settlementDensityGenerationVersion) {
+      final cellBounds = Rect.fromLTWH(
+        cellLeft,
+        cellTop,
+        districtSize,
+        districtSize,
+      );
+      for (final footprint in _settlementFootprintsWithin(cellBounds)) {
+        final center = footprint.$1;
+        if (!cellBounds.contains(Offset(center.x, center.y)) ||
+            center.distanceTo(const WorldMapPoint(0, 155)) < 1) {
+          continue;
+        }
+        final localRandom = Random(
+          _stableHash(
+            '$seed|settlement-field-cluster|${center.x.round()}|${center.y.round()}|v$generationVersion',
+          ),
+        );
+        final largerSettlement = footprint.$2 >= 380;
+        clusters.add((
+          center: center,
+          radius: largerSettlement ? 1080 : 820,
+          count: largerSettlement
+              ? 18 + localRandom.nextInt(7)
+              : 14 + localRandom.nextInt(7),
+        ));
+      }
+    }
+
     final accepted = <WorldMapParcel>[];
     final preservedParcels = _preservedLegacyParcels;
     final nextIndexByChunk = <String, int>{};
@@ -1937,7 +2265,9 @@ class ProceduralFarmWorld {
     WorldMapParcel candidate,
     List<WorldMapParcel> accepted,
   ) {
-    const clearance = 24.0;
+    final clearance = generationVersion >= settlementDensityGenerationVersion
+        ? 8.0
+        : 24.0;
     return accepted.any(
       (parcel) =>
           (candidate.center.x - parcel.center.x).abs() <
@@ -2888,6 +3218,361 @@ class ProceduralFarmWorld {
     return List.unmodifiable(roadsById.values);
   }
 
+  /// Finds a drivable route along generated roads, with short access roads at
+  /// both ends. Returns null when either stop is too far from the road network
+  /// or the generated network does not connect them.
+  List<WorldMapPoint>? findRoadRoute(
+    WorldMapPoint start,
+    WorldMapPoint end, {
+    double maxAccessDistance = 640,
+  }) {
+    if (!_insideWorld(start) || !_insideWorld(end)) return null;
+    if (start.distanceTo(end) <= 0.1) return [start, end];
+
+    const searchExpansions = [0.0, 640.0, 1280.0, 2560.0];
+    for (final expansion in searchExpansions) {
+      final padding = maxAccessDistance + expansion;
+      final bounds = Rect.fromLTRB(
+        max(worldBounds.left, min(start.x, end.x) - padding).toDouble(),
+        max(worldBounds.top, min(start.y, end.y) - padding).toDouble(),
+        min(worldBounds.right, max(start.x, end.x) + padding).toDouble(),
+        min(worldBounds.bottom, max(start.y, end.y) + padding).toDouble(),
+      );
+      final roads = roadSegmentsInBounds(
+        bounds.left,
+        bounds.top,
+        bounds.right,
+        bounds.bottom,
+      );
+      final route = _findRouteWithinRoads(
+        start,
+        end,
+        roads,
+        maxAccessDistance: maxAccessDistance,
+      );
+      if (route != null) return route;
+    }
+    return null;
+  }
+
+  bool _insideWorld(WorldMapPoint point) =>
+      point.x >= worldBounds.left &&
+      point.x <= worldBounds.right &&
+      point.y >= worldBounds.top &&
+      point.y <= worldBounds.bottom;
+
+  List<WorldMapPoint>? _findRouteWithinRoads(
+    WorldMapPoint start,
+    WorldMapPoint end,
+    List<WorldMapRoad> roads, {
+    required double maxAccessDistance,
+  }) {
+    if (roads.isEmpty) return null;
+
+    final nodePositions = <WorldMapPoint>[];
+    final nodeIds = <String, int>{};
+    final graph = <int, List<_DrivableRoadEdge>>{};
+    final roadInfos = <_DrivableRoadInfo>[];
+    int nodeFor(WorldMapPoint point) {
+      final key = '${(point.x * 10).round()}:${(point.y * 10).round()}';
+      return nodeIds.putIfAbsent(key, () {
+        final id = nodePositions.length;
+        nodePositions.add(point);
+        return id;
+      });
+    }
+
+    void connect(int from, int to, List<WorldMapPoint> points, double cost) {
+      if (from == to || cost < 0 || points.length < 2) return;
+      graph
+          .putIfAbsent(from, () => [])
+          .add(_DrivableRoadEdge(to: to, cost: cost, points: points));
+    }
+
+    for (final road in roads) {
+      if (road.points.length < 2) continue;
+      final cumulative = List<double>.filled(road.points.length, 0);
+      for (var index = 1; index < road.points.length; index++) {
+        cumulative[index] =
+            cumulative[index - 1] +
+            road.points[index - 1].distanceTo(road.points[index]);
+      }
+      final length = cumulative.last;
+      if (length <= 0.1) continue;
+      final factor = _roadTravelCostFactor(road.type);
+      final startNode = nodeFor(road.points.first);
+      final endNode = nodeFor(road.points.last);
+      final roadPath = List<WorldMapPoint>.unmodifiable(road.points);
+      connect(startNode, endNode, roadPath, length * factor);
+      connect(
+        endNode,
+        startNode,
+        roadPath.reversed.toList(growable: false),
+        length * factor,
+      );
+      roadInfos.add(
+        _DrivableRoadInfo(
+          road: road,
+          startNode: startNode,
+          endNode: endNode,
+          cumulative: cumulative,
+          length: length,
+          costFactor: factor,
+        ),
+      );
+    }
+    if (roadInfos.isEmpty) return null;
+
+    final sourceSnaps = _nearestUsableRoadSnaps(
+      start,
+      roadInfos,
+      maxAccessDistance: maxAccessDistance,
+    );
+    final destinationSnaps = _nearestUsableRoadSnaps(
+      end,
+      roadInfos,
+      maxAccessDistance: maxAccessDistance,
+    );
+    if (sourceSnaps.isEmpty || destinationSnaps.isEmpty) return null;
+
+    final sourceNode = nodePositions.length;
+    final destinationNode = sourceNode + 1;
+    void attachSource(_RoadSnap snap, int node, double roadEndDistance) {
+      final roadPart = _pointsAlongRoad(
+        snap.road,
+        snap.distanceAlongRoad,
+        roadEndDistance,
+      );
+      final path = <WorldMapPoint>[start, ...roadPart];
+      connect(
+        sourceNode,
+        node,
+        path,
+        snap.accessDistance +
+            (snap.distanceAlongRoad - roadEndDistance).abs() *
+                snap.road.costFactor,
+      );
+    }
+
+    void attachDestination(_RoadSnap snap, int node, double roadStartDistance) {
+      final roadPart = _pointsAlongRoad(
+        snap.road,
+        roadStartDistance,
+        snap.distanceAlongRoad,
+      );
+      final path = <WorldMapPoint>[...roadPart, end];
+      connect(
+        node,
+        destinationNode,
+        path,
+        (snap.distanceAlongRoad - roadStartDistance).abs() *
+                snap.road.costFactor +
+            snap.accessDistance,
+      );
+    }
+
+    for (final snap in sourceSnaps) {
+      attachSource(snap, snap.road.startNode, 0);
+      attachSource(snap, snap.road.endNode, snap.road.length);
+    }
+    for (final snap in destinationSnaps) {
+      attachDestination(snap, snap.road.startNode, 0);
+      attachDestination(snap, snap.road.endNode, snap.road.length);
+    }
+
+    for (final sourceSnap in sourceSnaps) {
+      for (final destinationSnap in destinationSnaps) {
+        if (sourceSnap.road.road.id != destinationSnap.road.road.id) continue;
+        final roadPart = _pointsAlongRoad(
+          sourceSnap.road,
+          sourceSnap.distanceAlongRoad,
+          destinationSnap.distanceAlongRoad,
+        );
+        final path = <WorldMapPoint>[start, ...roadPart, end];
+        connect(
+          sourceNode,
+          destinationNode,
+          path,
+          sourceSnap.accessDistance +
+              (destinationSnap.distanceAlongRoad - sourceSnap.distanceAlongRoad)
+                      .abs() *
+                  sourceSnap.road.costFactor +
+              destinationSnap.accessDistance,
+        );
+      }
+    }
+
+    final bestCost = <int, double>{sourceNode: 0};
+    final previousNode = <int, int>{};
+    final previousEdge = <int, _DrivableRoadEdge>{};
+    final frontier = _DrivableRouteHeap();
+    frontier.add(_DrivableRouteCandidate(node: sourceNode, cost: 0));
+    while (frontier.isNotEmpty) {
+      final current = frontier.removeFirst();
+      if (current.cost > (bestCost[current.node] ?? double.infinity) + 1e-7) {
+        continue;
+      }
+      if (current.node == destinationNode) break;
+      for (final edge in graph[current.node] ?? const []) {
+        final nextCost = current.cost + edge.cost;
+        if (nextCost >= (bestCost[edge.to] ?? double.infinity) - 1e-7) {
+          continue;
+        }
+        bestCost[edge.to] = nextCost;
+        previousNode[edge.to] = current.node;
+        previousEdge[edge.to] = edge;
+        frontier.add(_DrivableRouteCandidate(node: edge.to, cost: nextCost));
+      }
+    }
+    if (!bestCost.containsKey(destinationNode)) return null;
+
+    final reversedEdges = <_DrivableRoadEdge>[];
+    var cursor = destinationNode;
+    while (cursor != sourceNode) {
+      final edge = previousEdge[cursor];
+      final previous = previousNode[cursor];
+      if (edge == null || previous == null) return null;
+      reversedEdges.add(edge);
+      cursor = previous;
+    }
+    final route = <WorldMapPoint>[];
+    for (final edge in reversedEdges.reversed) {
+      for (final point in edge.points) {
+        if (route.isEmpty || route.last.distanceTo(point) > 0.1) {
+          route.add(point);
+        }
+      }
+    }
+    return route.length >= 2 ? List.unmodifiable(route) : null;
+  }
+
+  double _roadTravelCostFactor(WorldMapRoadType type) => switch (type) {
+    WorldMapRoadType.arterial => 1.0,
+    WorldMapRoadType.secondary => 1.08,
+    WorldMapRoadType.dirt => 1.2,
+    WorldMapRoadType.trail => 1.55,
+  };
+
+  List<_RoadSnap> _nearestUsableRoadSnaps(
+    WorldMapPoint point,
+    List<_DrivableRoadInfo> roads, {
+    required double maxAccessDistance,
+  }) {
+    final bestSnapByRoad = <String, _RoadSnap>{};
+    for (final road in roads) {
+      for (var index = 0; index < road.road.points.length - 1; index++) {
+        final segmentStart = road.road.points[index];
+        final segmentEnd = road.road.points[index + 1];
+        final dx = segmentEnd.x - segmentStart.x;
+        final dy = segmentEnd.y - segmentStart.y;
+        final lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= 0.001) continue;
+        final projection =
+            (((point.x - segmentStart.x) * dx +
+                        (point.y - segmentStart.y) * dy) /
+                    lengthSquared)
+                .clamp(0.0, 1.0);
+        final snapPoint = WorldMapPoint(
+          segmentStart.x + dx * projection.toDouble(),
+          segmentStart.y + dy * projection.toDouble(),
+        );
+        final accessDistance = point.distanceTo(snapPoint);
+        if (accessDistance > maxAccessDistance) continue;
+        final candidate = _RoadSnap(
+          road: road,
+          point: snapPoint,
+          accessDistance: accessDistance,
+          distanceAlongRoad:
+              road.cumulative[index] +
+              segmentStart.distanceTo(segmentEnd) * projection.toDouble(),
+        );
+        final previous = bestSnapByRoad[road.road.id];
+        if (previous == null || accessDistance < previous.accessDistance) {
+          bestSnapByRoad[road.road.id] = candidate;
+        }
+      }
+    }
+    final candidates = bestSnapByRoad.values.toList()
+      ..sort((a, b) => a.accessDistance.compareTo(b.accessDistance));
+    final usable = <_RoadSnap>[];
+    for (final candidate in candidates.take(20)) {
+      if (_roadAccessConnectorIsClear(
+        point,
+        candidate.point,
+        candidate.road.road.width,
+      )) {
+        usable.add(candidate);
+        if (usable.length == 8) break;
+      }
+    }
+    return usable;
+  }
+
+  bool _roadAccessConnectorIsClear(
+    WorldMapPoint start,
+    WorldMapPoint end,
+    double roadWidth,
+  ) {
+    final distance = start.distanceTo(end);
+    final sampleCount = (distance / 36).ceil();
+    for (var step = 1; step < sampleCount; step++) {
+      final t = step / sampleCount;
+      final point = WorldMapPoint(
+        start.x + (end.x - start.x) * t,
+        start.y + (end.y - start.y) * t,
+      );
+      if (_pointBlockedByRelief(point, margin: roadWidth / 2 + 10)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<WorldMapPoint> _pointsAlongRoad(
+    _DrivableRoadInfo road,
+    double startDistance,
+    double endDistance,
+  ) {
+    final reverse = startDistance > endDistance;
+    final low = min(
+      startDistance,
+      endDistance,
+    ).clamp(0.0, road.length).toDouble();
+    final high = max(
+      startDistance,
+      endDistance,
+    ).clamp(0.0, road.length).toDouble();
+    WorldMapPoint pointAt(double distance) {
+      if (distance <= 0) return road.road.points.first;
+      if (distance >= road.length) return road.road.points.last;
+      for (var index = 0; index < road.cumulative.length - 1; index++) {
+        final segmentStart = road.cumulative[index];
+        final segmentEnd = road.cumulative[index + 1];
+        if (distance > segmentEnd) continue;
+        final segmentLength = segmentEnd - segmentStart;
+        if (segmentLength <= 0.001) return road.road.points[index];
+        final t = ((distance - segmentStart) / segmentLength)
+            .clamp(0.0, 1.0)
+            .toDouble();
+        final a = road.road.points[index];
+        final b = road.road.points[index + 1];
+        return WorldMapPoint(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+      }
+      return road.road.points.last;
+    }
+
+    final points = <WorldMapPoint>[pointAt(low)];
+    for (var index = 1; index < road.cumulative.length - 1; index++) {
+      if (road.cumulative[index] > low + 0.1 &&
+          road.cumulative[index] < high - 0.1) {
+        points.add(road.road.points[index]);
+      }
+    }
+    if (high - low > 0.1) points.add(pointAt(high));
+    if (reverse) return points.reversed.toList(growable: false);
+    return points;
+  }
+
   List<WorldMapRoad> _districtRoadsAt(int x, int y) {
     final key = 'district:$x:$y';
     return _roadCache.putIfAbsent(key, () {
@@ -2913,7 +3598,8 @@ class ProceduralFarmWorld {
           horizontalVariant < 56
               ? WorldMapRoadType.arterial
               : WorldMapRoadType.secondary,
-          bendScale: 0.18,
+          bendScale: 0.055,
+          maxBend: 320,
         );
         if (road != null) roads.add(road);
       }
@@ -2934,7 +3620,8 @@ class ProceduralFarmWorld {
           verticalVariant < 56
               ? WorldMapRoadType.arterial
               : WorldMapRoadType.secondary,
-          bendScale: 0.18,
+          bendScale: 0.055,
+          maxBend: 320,
         );
         if (road != null) roads.add(road);
       }
@@ -3013,8 +3700,8 @@ class ProceduralFarmWorld {
           gate.position,
           junction,
           type,
-          bendScale: 0.24,
-          maxBend: 72,
+          bendScale: 0.12,
+          maxBend: 48,
         );
         if (road != null) roads.add(road);
       }
@@ -3893,6 +4580,22 @@ class ProceduralFarmWorld {
         ));
       }
     }
+    if (generationVersion >= settlementDensityGenerationVersion &&
+        !_buildingPrimarySettlements) {
+      final supplemental = <WorldMapSettlement>{
+        ...?_supplementalSettlementsCache,
+        ..._supplementalSettlementsByDistrict.values
+            .whereType<WorldMapSettlement>(),
+      };
+      for (final settlement in supplemental) {
+        final radius = _settlementKeepoutRadius(settlement.kind);
+        if (bounds
+            .inflate(radius)
+            .contains(Offset(settlement.position.x, settlement.position.y))) {
+          result.add((settlement.position, radius));
+        }
+      }
+    }
     return result;
   }
 
@@ -3987,6 +4690,11 @@ class ProceduralFarmWorld {
   WorldMapRoad? _nearestRoadAt(
     WorldMapPoint point, {
     required double searchRadius,
+  }) => _nearestRoadMeasurementAt(point, searchRadius: searchRadius).$1;
+
+  (WorldMapRoad?, double) _nearestRoadMeasurementAt(
+    WorldMapPoint point, {
+    required double searchRadius,
   }) {
     final roads = roadSegmentsInBounds(
       point.x - searchRadius,
@@ -4007,7 +4715,9 @@ class ProceduralFarmWorld {
         }
       }
     }
-    return nearestDistance <= searchRadius ? nearestRoad : null;
+    return nearestDistance <= searchRadius
+        ? (nearestRoad, nearestDistance)
+        : (null, nearestDistance);
   }
 
   WorldMapPoint? _nearestRoadPosition(
@@ -4309,6 +5019,107 @@ class _RoadRouteHeap {
       final child = _items[childIndex];
       if (!_comesBefore(child, last)) break;
       _items[index] = child;
+      index = childIndex;
+    }
+    _items[index] = last;
+    return first;
+  }
+}
+
+class _DrivableRoadInfo {
+  const _DrivableRoadInfo({
+    required this.road,
+    required this.startNode,
+    required this.endNode,
+    required this.cumulative,
+    required this.length,
+    required this.costFactor,
+  });
+
+  final WorldMapRoad road;
+  final int startNode;
+  final int endNode;
+  final List<double> cumulative;
+  final double length;
+  final double costFactor;
+}
+
+class _RoadSnap {
+  const _RoadSnap({
+    required this.road,
+    required this.point,
+    required this.accessDistance,
+    required this.distanceAlongRoad,
+  });
+
+  final _DrivableRoadInfo road;
+  final WorldMapPoint point;
+  final double accessDistance;
+  final double distanceAlongRoad;
+}
+
+class _DrivableRoadEdge {
+  const _DrivableRoadEdge({
+    required this.to,
+    required this.cost,
+    required this.points,
+  });
+
+  final int to;
+  final double cost;
+  final List<WorldMapPoint> points;
+}
+
+class _DrivableRouteCandidate {
+  const _DrivableRouteCandidate({required this.node, required this.cost});
+
+  final int node;
+  final double cost;
+}
+
+class _DrivableRouteHeap {
+  final List<_DrivableRouteCandidate> _items = [];
+
+  bool get isNotEmpty => _items.isNotEmpty;
+
+  static bool _comesBefore(
+    _DrivableRouteCandidate first,
+    _DrivableRouteCandidate second,
+  ) {
+    final costOrder = first.cost.compareTo(second.cost);
+    if (costOrder != 0) return costOrder < 0;
+    return first.node < second.node;
+  }
+
+  void add(_DrivableRouteCandidate candidate) {
+    var index = _items.length;
+    _items.add(candidate);
+    while (index > 0) {
+      final parentIndex = (index - 1) ~/ 2;
+      final parent = _items[parentIndex];
+      if (!_comesBefore(candidate, parent)) break;
+      _items[index] = parent;
+      index = parentIndex;
+    }
+    _items[index] = candidate;
+  }
+
+  _DrivableRouteCandidate removeFirst() {
+    final first = _items.first;
+    final last = _items.removeLast();
+    if (_items.isEmpty) return first;
+    var index = 0;
+    while (true) {
+      final leftIndex = index * 2 + 1;
+      if (leftIndex >= _items.length) break;
+      final rightIndex = leftIndex + 1;
+      final childIndex =
+          rightIndex < _items.length &&
+              _comesBefore(_items[rightIndex], _items[leftIndex])
+          ? rightIndex
+          : leftIndex;
+      if (!_comesBefore(_items[childIndex], last)) break;
+      _items[index] = _items[childIndex];
       index = childIndex;
     }
     _items[index] = last;

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:async';
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
@@ -20,6 +21,7 @@ import 'components/route_visual_component.dart';
 import 'components/factory_component.dart';
 import 'components/coop_component.dart';
 import 'domain/audio_controller.dart';
+import 'domain/debug_action_controller.dart';
 
 enum ManagementMapSelection { starterPlot, farmhouse, grainBarn, toolShed }
 
@@ -87,6 +89,10 @@ class OpeningMowingWorld extends World {
 
   JoystickComponent? joystick;
   Vector2? movementInputOverride;
+  double _debugMovementWaitSeconds = 0;
+  bool _debugMovementReady = false;
+  bool _debugBalePickupPending = false;
+  bool _debugSalePending = false;
 
   void _initializeComponents() {
     routeVisual = RouteVisualComponent(fleetManager: session.fleetManager);
@@ -343,8 +349,19 @@ class OpeningMowingWorld extends World {
   void _updatePhysicsStep(double dt) {
     final input = currentMovementInput;
     final isMoving = input.length > 0.01;
+    final debugModeEnabled = DebugActionController.instance.debugModeEnabled;
+    if (debugModeEnabled && isMoving && !_debugMovementReady) {
+      _debugMovementWaitSeconds += dt;
+      if (_debugMovementWaitSeconds >=
+          DebugActionController.actionDelay.inSeconds) {
+        _debugMovementReady = true;
+      }
+    } else if (!debugModeEnabled || !isMoving) {
+      _debugMovementWaitSeconds = 0;
+      _debugMovementReady = false;
+    }
 
-    if (isMoving) {
+    if (isMoving && (!debugModeEnabled || _debugMovementReady)) {
       player.move(input, dt);
       _clampPlayerPosition();
       backpackStack.triggerStepWobble(input.length);
@@ -370,6 +387,7 @@ class OpeningMowingWorld extends World {
       }
     } else {
       player.stopMoving();
+      player.updateMowing(false, dt);
     }
 
     for (final pad in upgradePads) {
@@ -431,6 +449,31 @@ class OpeningMowingWorld extends World {
   void _checkBalePickup() {
     if (!session.canPickUpBale) return;
 
+    final debugController = DebugActionController.instance;
+    if (debugController.debugModeEnabled) {
+      if (_debugBalePickupPending) return;
+      for (final bale in List<GroundBaleComponent>.from(groundBales)) {
+        if ((player.position - bale.position).length > 36) continue;
+        _debugBalePickupPending = true;
+        unawaited(
+          debugController
+              .runPlayerAction<void>(() {
+                if (session.canPickUpBale &&
+                    (player.position - bale.position).length <= 36 &&
+                    session.pickUpBale()) {
+                  AudioController.instance.playEffect(SoundEffect.balePickup);
+                  groundBales.remove(bale);
+                  bale.removeFromParent();
+                  player.updateMowing(false, 0);
+                }
+              })
+              .whenComplete(() => _debugBalePickupPending = false),
+        );
+        return;
+      }
+      return;
+    }
+
     for (final bale in List<GroundBaleComponent>.from(groundBales)) {
       if ((player.position - bale.position).length <= 36) {
         if (session.pickUpBale()) {
@@ -453,6 +496,59 @@ class OpeningMowingWorld extends World {
     }
 
     _saleIntervalTimer += dt;
+    final debugController = DebugActionController.instance;
+    if (debugController.debugModeEnabled) {
+      if (_debugSalePending) return;
+      if (session.carriedBaleCount > 0 && _saleIntervalTimer >= 0.08) {
+        _saleIntervalTimer = 0.0;
+        _debugSalePending = true;
+        unawaited(
+          debugController
+              .runPlayerAction<void>(() {
+                if (saleZoneArea.contains(player.position.toOffset()) &&
+                    session.sellOneBale()) {
+                  saleZone.triggerSaleEffect();
+                  AudioController.instance.playEffect(SoundEffect.coinEarned);
+                  add(
+                    FloatingTextComponent(
+                      position: Vector2(
+                        saleZoneArea.center.dx +
+                            (Random().nextDouble() - 0.5) * 40,
+                        saleZoneArea.center.dy,
+                      ),
+                      text: '+30 ÇK',
+                    ),
+                  );
+                }
+              })
+              .whenComplete(() => _debugSalePending = false),
+        );
+      } else if (session.canSellBale) {
+        _saleIntervalTimer = 0.0;
+        _debugSalePending = true;
+        unawaited(
+          debugController
+              .runPlayerAction<void>(() {
+                if (saleZoneArea.contains(player.position.toOffset()) &&
+                    session.enterSaleZone()) {
+                  saleZone.triggerSaleEffect();
+                  AudioController.instance.playEffect(SoundEffect.coinEarned);
+                  add(
+                    FloatingTextComponent(
+                      position: Vector2(
+                        saleZoneArea.center.dx,
+                        saleZoneArea.center.dy,
+                      ),
+                      text: '+30 ÇK',
+                    ),
+                  );
+                }
+              })
+              .whenComplete(() => _debugSalePending = false),
+        );
+      }
+      return;
+    }
     if (session.carriedBaleCount > 0 && _saleIntervalTimer >= 0.08) {
       _saleIntervalTimer = 0.0;
       if (session.sellOneBale()) {

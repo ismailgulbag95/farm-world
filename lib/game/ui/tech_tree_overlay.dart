@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../domain/opening_session.dart';
 import '../domain/tech_tree.dart';
+import '../domain/debug_action_controller.dart';
 
 /// Full-screen, pannable research board for Farm World's technology tree.
 class TechTreeOverlay extends StatefulWidget {
@@ -928,17 +929,22 @@ class _TechTreeOverlayState extends State<TechTreeOverlay> {
   }
 
   void _purchaseNode(TechNode node) {
-    if (!_engine.purchaseNode(
-      node.id,
-      widget.session,
-      researchOnly: widget.researchOnly,
-    )) {
-      return;
-    }
-    HapticFeedback.mediumImpact();
-    _refreshProgressState();
-    setState(() {});
-    widget.onNodePurchased?.call();
+    unawaited(
+      DebugActionController.instance.runPlayerAction<void>(() {
+        if (!mounted ||
+            !_engine.purchaseNode(
+              node.id,
+              widget.session,
+              researchOnly: widget.researchOnly,
+            )) {
+          return;
+        }
+        HapticFeedback.mediumImpact();
+        _refreshProgressState();
+        setState(() {});
+        widget.onNodePurchased?.call();
+      }),
+    );
   }
 
   bool _isPrerequisiteSatisfied(String id) =>

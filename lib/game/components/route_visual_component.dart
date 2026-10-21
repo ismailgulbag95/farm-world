@@ -5,9 +5,7 @@ import '../domain/logistics_fleet.dart';
 
 /// Renders stylized logistics transport routes with dashed lines and stop markers.
 class RouteVisualComponent extends Component {
-  RouteVisualComponent({
-    required this.fleetManager,
-  }) : super(priority: 4);
+  RouteVisualComponent({required this.fleetManager}) : super(priority: 4);
 
   final LogisticsFleetManager fleetManager;
 
@@ -29,19 +27,21 @@ class RouteVisualComponent extends Component {
       ..style = PaintingStyle.fill;
 
     for (final route in fleetManager.routes) {
-      if (!route.isActive || route.stops.length < 2) continue;
+      if (!route.isActive || !route.hasRoadGeometry) continue;
 
       final path = Path();
-      final first = route.stops.first;
-      path.moveTo(first.positionX, first.positionY);
+      final legCount = route.stops.length == 2 ? 1 : route.stops.length;
+      for (var legIndex = 0; legIndex < legCount; legIndex++) {
+        final legPoints = route.pathForLeg(legIndex);
+        if (legPoints.isEmpty) continue;
 
-      for (int i = 1; i < route.stops.length; i++) {
-        final stop = route.stops[i];
-        path.lineTo(stop.positionX, stop.positionY);
+        path.moveTo(legPoints.first.x, legPoints.first.y);
+        for (final point in legPoints.skip(1)) {
+          path.lineTo(point.x, point.y);
+        }
       }
-      path.close();
 
-      // Draw route connecting lines
+      // Each subpath follows the road geometry stored for that route leg.
       canvas.drawPath(path, linePaint);
 
       // Draw stop indicator circles

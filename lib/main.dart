@@ -11,13 +11,16 @@ import 'game/domain/farm_equipment.dart';
 import 'game/domain/opening_session.dart';
 import 'game/domain/opening_crop_catalog.dart';
 import 'game/domain/market_and_offline.dart';
+import 'game/domain/debug_action_controller.dart';
 import 'game/farm_world_game.dart';
 import 'game/opening_mowing_world.dart';
 import 'game/persistence/opening_session_store.dart';
 import 'game/ui/game_loading_screen.dart';
 import 'game/ui/story_comic_screen.dart';
 import 'game/ui/tech_tree_overlay.dart';
+import 'game/ui/woodcutting_opening_screen.dart';
 import 'game/ui/world_map_screen.dart';
+import 'game/ui/debug_settings_button.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
@@ -56,7 +59,7 @@ void main() async {
   );
 }
 
-enum _AppLaunchPhase { loading, comic, worldMap }
+enum _AppLaunchPhase { loading, woodcutting, comic, worldMap }
 
 class WorldMapPrototypeApp extends StatefulWidget {
   const WorldMapPrototypeApp({
@@ -84,8 +87,10 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
   @override
   void initState() {
     super.initState();
-    if (widget.session.tutorialStep == FarmTutorialStep.story) {
-      widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
+    if (!widget.session.hasCompletedWoodcuttingOpening) {
+      _phase = _AppLaunchPhase.woodcutting;
+    } else if (!widget.session.hasCompletedWoodcuttingStory) {
+      _phase = _AppLaunchPhase.comic;
     }
     _autosaver = OpeningSessionAutosaver(
       session: widget.session,
@@ -111,12 +116,24 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
   }
 
   void _onComicComplete() {
+    widget.session.completeWoodcuttingStory();
     if (widget.session.tutorialStep == FarmTutorialStep.story) {
       widget.session.setFarmTutorialStep(FarmTutorialStep.prepare);
-      _autosaver.flush();
     }
+    _autosaver.flush();
     setState(() {
       _phase = _AppLaunchPhase.worldMap;
+    });
+  }
+
+  void _onWoodcuttingHookCompleted() {
+    widget.session.completeWoodcuttingOpening();
+    _autosaver.flush();
+  }
+
+  void _onWoodcuttingReturnToFarm() {
+    setState(() {
+      _phase = _AppLaunchPhase.comic;
     });
   }
 
@@ -142,6 +159,12 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
       _AppLaunchPhase.loading => GameLoadingScreen(
         onLoadingComplete: _onLoadingComplete,
       ),
+      _AppLaunchPhase.woodcutting => WoodcuttingOpeningScreen(
+        session: widget.session,
+        onProgressChanged: _autosaver.flush,
+        onHookCompleted: _onWoodcuttingHookCompleted,
+        onReadLetter: _onWoodcuttingReturnToFarm,
+      ),
       _AppLaunchPhase.comic => StoryComicScreen(onComplete: _onComicComplete),
       _AppLaunchPhase.worldMap => Scaffold(
         body: WorldMapScreen(
@@ -155,8 +178,8 @@ class _WorldMapPrototypeAppState extends State<WorldMapPrototypeApp> {
   );
 }
 
-/// Retained standalone research-tree shell for future navigation; the prototype
-/// entry point currently starts in the world map.
+/// Retained standalone research-tree shell; the main launch enters through the
+/// woodcutting opening and then continues to the world map.
 class TechTreeOnlyApp extends StatefulWidget {
   const TechTreeOnlyApp({
     super.key,
@@ -417,6 +440,8 @@ class OpeningHudOverlay extends StatelessWidget {
                       l10n: l10n,
                       onLocaleSelected: onLocaleSelected,
                     ),
+                    const SizedBox(width: 4),
+                    const DebugSettingsButton(),
                   ],
                 ),
               ),
@@ -453,6 +478,10 @@ class OpeningHudOverlay extends StatelessWidget {
     );
   }
 }
+
+VoidCallback _debugAction<T>(FutureOr<T> Function() action) => () {
+  unawaited(DebugActionController.instance.runPlayerAction(action));
+};
 
 void _openTechTree(BuildContext context, FarmWorldGame game) {
   HapticFeedback.lightImpact();
@@ -790,7 +819,7 @@ class _OpeningProgressCard extends StatelessWidget {
               artworkPath:
                   'assets/visual-concepts/pilot/vehicle-mini-mower-v1.png',
               artworkLabel: l10n.mowerArtworkAccessibility,
-              onPressed: game.buyMower,
+              onPressed: _debugAction(game.buyMower),
             );
           } else {
             title = l10n.openingScytheTitle;
@@ -866,7 +895,7 @@ class _OpeningProgressCard extends StatelessWidget {
               ),
               artworkPath: 'assets/visual-concepts/pilot/worker-employee-turnaround-v1.png',
               artworkLabel: l10n.workerArtworkAccessibility,
-              onPressed: game.hireWorker,
+              onPressed: _debugAction(game.hireWorker),
             );
           } else {
             final remaining = math.max(
@@ -895,7 +924,7 @@ class _OpeningProgressCard extends StatelessWidget {
                   ),
                   artworkPath: cropArtworkPath,
                   artworkLabel: _cropArtworkAccessibility(crop.crop.id, l10n),
-                  onPressed: game.harvestCrop,
+                  onPressed: _debugAction(game.harvestCrop),
                 );
               } else {
                 body = l10n.firstTradeReadyBody(
@@ -909,7 +938,7 @@ class _OpeningProgressCard extends StatelessWidget {
                   ),
                   artworkPath: cropArtworkPath,
                   artworkLabel: _cropArtworkAccessibility(crop.crop.id, l10n),
-                  onPressed: game.harvestCrop,
+                  onPressed: _debugAction(game.harvestCrop),
                 );
               }
             } else {
@@ -944,7 +973,9 @@ class _OpeningProgressCard extends StatelessWidget {
                   'assets/visual-concepts/pilot/crop-maize-mature-v1.png',
               artworkLabel: l10n.cropPlotAccessibility,
               onPressed: session.canPlantCrop(OpeningSession.starterMaizeId)
-                  ? () => game.plantCrop(OpeningSession.starterMaizeId)
+                  ? _debugAction(
+                      () => game.plantCrop(OpeningSession.starterMaizeId),
+                    )
                   : null,
             );
           } else {
@@ -969,7 +1000,9 @@ class _OpeningProgressCard extends StatelessWidget {
                   'assets/visual-concepts/pilot/crop-maize-mature-v1.png',
               artworkLabel: l10n.cropPlotAccessibility,
               onPressed: session.canPlantCrop(OpeningSession.starterMaizeId)
-                  ? () => game.plantCrop(OpeningSession.starterMaizeId)
+                  ? _debugAction(
+                      () => game.plantCrop(OpeningSession.starterMaizeId),
+                    )
                   : null,
             );
             additionalActions.add(
@@ -982,7 +1015,9 @@ class _OpeningProgressCard extends StatelessWidget {
                     'assets/visual-concepts/pilot/crop-wheat-mature-v1.png',
                 artworkLabel: l10n.cropPlotAccessibility,
                 onPressed: session.canPlantCrop(OpeningSession.starterWheatId)
-                    ? () => game.plantCrop(OpeningSession.starterWheatId)
+                    ? _debugAction(
+                        () => game.plantCrop(OpeningSession.starterWheatId),
+                      )
                     : null,
               ),
             );
@@ -1063,8 +1098,10 @@ class _OpeningProgressCard extends StatelessWidget {
                     session.canPurchaseTechnology(
                       OpeningSession.soilCareTechnologyId,
                     )
-                    ? () => game.purchaseTechnology(
-                        OpeningSession.soilCareTechnologyId,
+                    ? _debugAction(
+                        () => game.purchaseTechnology(
+                          OpeningSession.soilCareTechnologyId,
+                        ),
                       )
                     : null,
               ),
@@ -1386,8 +1423,10 @@ class _SoilConditionPanel extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: () => game.setAutomaticSoilCareEnabled(
-                  !session.automaticSoilCareEnabled,
+                onPressed: _debugAction(
+                  () => game.setAutomaticSoilCareEnabled(
+                    !session.automaticSoilCareEnabled,
+                  ),
                 ),
                 icon: const Icon(Icons.autorenew_rounded, size: 17),
                 label: Text(
@@ -1435,7 +1474,7 @@ void _addDiversityBranchActions(
           artworkPath: artworkPath,
           artworkLabel: artworkLabel,
           onPressed: session.canPurchaseTechnology(familyTechnologyId)
-              ? () => game.purchaseTechnology(familyTechnologyId)
+              ? _debugAction(() => game.purchaseTechnology(familyTechnologyId))
               : null,
         ),
       );
@@ -1452,7 +1491,7 @@ void _addDiversityBranchActions(
           artworkPath: artworkPath,
           artworkLabel: artworkLabel,
           onPressed: session.canPurchaseTechnology(cropTechnologyId)
-              ? () => game.purchaseTechnology(cropTechnologyId)
+              ? _debugAction(() => game.purchaseTechnology(cropTechnologyId))
               : null,
         ),
       );
@@ -1467,7 +1506,7 @@ void _addDiversityBranchActions(
         artworkPath: artworkPath,
         artworkLabel: artworkLabel,
         onPressed: session.canPlantCrop(cropId)
-            ? () => game.plantCrop(cropId)
+            ? _debugAction(() => game.plantCrop(cropId))
             : null,
       ),
     );

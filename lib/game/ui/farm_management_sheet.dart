@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../domain/crop_plot.dart';
+import '../domain/debug_action_controller.dart';
 import '../domain/delivery_contracts.dart';
 import '../domain/farm_building.dart';
 import '../domain/logistics_fleet.dart';
@@ -24,12 +25,14 @@ class FarmManagementSheet extends StatefulWidget {
     required this.onSelectPlot,
     required this.onSelectVehicle,
     required this.onChanged,
+    this.findDrivableRoute,
   });
 
   final OpeningSession session;
   final ValueChanged<CropPlotState> onSelectPlot;
   final ValueChanged<FleetVehicleState> onSelectVehicle;
   final VoidCallback onChanged;
+  final DrivableRouteFinder? findDrivableRoute;
 
   @override
   State<FarmManagementSheet> createState() => _FarmManagementSheetState();
@@ -116,7 +119,11 @@ class _FarmManagementSheetState extends State<FarmManagementSheet> {
                     onChanged: _changed,
                   ),
                   _BuildingsPanel(session: session, onChanged: _changed),
-                  _MarketPanel(session: session),
+                  _MarketPanel(
+                    session: session,
+                    onChanged: _changed,
+                    findDrivableRoute: widget.findDrivableRoute,
+                  ),
                   _ContractsPanel(session: session, onChanged: _changed),
                 ],
               ),
@@ -171,7 +178,9 @@ class _FieldsPanel extends StatelessWidget {
             ? (plot.use == CropPlotUse.pasture ? 'Çayır' : 'Boş tarla')
             : _itemName(plot.activeCropId!);
 
-        final snapshot = plot.hasActiveCrop ? plot.cropSnapshotAt(now, anchor) : null;
+        final snapshot = plot.hasActiveCrop
+            ? plot.cropSnapshotAt(now, anchor)
+            : null;
         final isHarvestable = snapshot?.isHarvestable ?? false;
         final isGrowing = snapshot != null && !isHarvestable;
         final hasActiveJob = plot.hasActiveJob;
@@ -179,7 +188,9 @@ class _FieldsPanel extends StatelessWidget {
         return Card(
           margin: EdgeInsets.zero,
           elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           color: Colors.white.withValues(alpha: 0.88),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -237,7 +248,11 @@ class _FieldsPanel extends StatelessWidget {
                         Navigator.of(context).pop();
                         onSelectPlot(plot);
                       },
-                      icon: const Icon(Icons.my_location_rounded, size: 20, color: _panelGreen),
+                      icon: const Icon(
+                        Icons.my_location_rounded,
+                        size: 20,
+                        color: _panelGreen,
+                      ),
                     ),
                   ],
                 ),
@@ -245,7 +260,10 @@ class _FieldsPanel extends StatelessWidget {
                 if (hasActiveJob) ...[
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFF3D6),
                       borderRadius: BorderRadius.circular(8),
@@ -255,7 +273,10 @@ class _FieldsPanel extends StatelessWidget {
                         const SizedBox(
                           width: 12,
                           height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF886000)),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF886000),
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -279,17 +300,24 @@ class _FieldsPanel extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF28583D),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      onPressed: () {
-                        if (session.harvestCropOnPlot(plot.id, now)) {
-                          onChanged();
-                        }
-                      },
+                      onPressed: DebugActionController.instance.actionCallback(
+                        () {
+                          if (session.harvestCropOnPlot(plot.id, now)) {
+                            onChanged();
+                          }
+                        },
+                      ),
                       icon: const Icon(Icons.archive_rounded, size: 16),
                       label: const Text(
                         'ÜRÜNÜ HASAT ET (AMBARA GÖNDER)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),
@@ -300,13 +328,19 @@ class _FieldsPanel extends StatelessWidget {
                       value: snapshot.growthProgress.clamp(0.0, 1.0),
                       minHeight: 8,
                       backgroundColor: const Color(0xFFE2EAD8),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF5A8E48)),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF5A8E48),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Olgunlaşıyor: %${(snapshot.growthProgress * 100).toInt()}',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF5A8E48)),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF5A8E48),
+                    ),
                   ),
                 ] else if (plot.use == CropPlotUse.pasture) ...[
                   if (session.canBalePasturePlot(plot.id, now))
@@ -316,15 +350,24 @@ class _FieldsPanel extends StatelessWidget {
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF7A8B43),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        onPressed: () {
-                          if (session.balePasturePlot(plot.id, now)) {
-                            onChanged();
-                          }
-                        },
+                        onPressed: DebugActionController.instance
+                            .actionCallback(() {
+                              if (session.balePasturePlot(plot.id, now)) {
+                                onChanged();
+                              }
+                            }),
                         icon: const Icon(Icons.inventory_2_rounded, size: 16),
-                        label: const Text('ÇAYIRI BİÇ VE BALYALA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                        label: const Text(
+                          'ÇAYIRI BİÇ VE BALYALA',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
                     )
                   else
@@ -332,7 +375,11 @@ class _FieldsPanel extends StatelessWidget {
                       plot.readyGrassBales > 0
                           ? '${plot.readyGrassBales} balya hazır'
                           : 'Çayır büyüme sürecinde',
-                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF707E60)),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFF707E60),
+                      ),
                     ),
                 ] else ...[
                   // Arable plot - check cultivation and planting
@@ -344,19 +391,24 @@ class _FieldsPanel extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _panelGreen,
                           side: const BorderSide(color: Color(0xFF86A775)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         onPressed: session.canCultivatePlot(plot.id)
-                            ? () {
+                            ? DebugActionController.instance.actionCallback(() {
                                 if (session.cultivatePlot(plot.id, now)) {
                                   onChanged();
                                 }
-                              }
+                              })
                             : null,
                         icon: const Icon(Icons.terrain_rounded, size: 16),
                         label: const Text(
                           'TARLAYI HAZIRLA (SÜRÜM)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ),
@@ -375,18 +427,29 @@ class _FieldsPanel extends StatelessWidget {
                           if (session.canPlantCropOnPlot(plot.id, cropId))
                             FilledButton.tonal(
                               style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              onPressed: () {
-                                if (session.plantCropOnPlot(plot.id, cropId, now)) {
-                                  onChanged();
-                                }
-                              },
+                              onPressed: DebugActionController.instance
+                                  .actionCallback(() {
+                                    if (session.plantCropOnPlot(
+                                      plot.id,
+                                      cropId,
+                                      now,
+                                    )) {
+                                      onChanged();
+                                    }
+                                  }),
                               child: Text(
                                 '+ ${_itemName(cropId)} Ek',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                       ],
@@ -502,14 +565,15 @@ class _FleetPanel extends StatelessWidget {
                               ? 'Aracı sürdür'
                               : 'Aracı duraklat',
                           visualDensity: VisualDensity.compact,
-                          onPressed: () {
-                            if (session.setFleetVehiclePaused(
-                              vehicle.id,
-                              !vehiclePaused,
-                            )) {
-                              onChanged();
-                            }
-                          },
+                          onPressed: DebugActionController.instance
+                              .actionCallback(() {
+                                if (session.setFleetVehiclePaused(
+                                  vehicle.id,
+                                  !vehiclePaused,
+                                )) {
+                                  onChanged();
+                                }
+                              }),
                           icon: Icon(
                             vehiclePaused
                                 ? Icons.play_circle_outline_rounded
@@ -548,27 +612,30 @@ class _FleetPanel extends StatelessWidget {
                             ),
                           ),
                         ],
-                        onSelected: (value) {
-                          if (value.startsWith('route:')) {
-                            final routeId = value.substring('route:'.length);
-                            final assigned = fleet.routes.where(
-                              (candidate) => candidate.id == routeId,
-                            );
-                            if (assigned.isNotEmpty &&
-                                session.setFleetRouteActive(
-                                  routeId,
-                                  !assigned.first.isActive,
-                                )) {
-                              onChanged();
-                            }
-                          } else if (value.startsWith('queue:') &&
-                              session.queueFleetRoute(
-                                vehicle.id,
-                                value.substring('queue:'.length),
-                              )) {
-                            onChanged();
-                          }
-                        },
+                        onSelected: (value) => DebugActionController.instance
+                            .runPlayerAction<void>(() {
+                              if (value.startsWith('route:')) {
+                                final routeId = value.substring(
+                                  'route:'.length,
+                                );
+                                final assigned = fleet.routes.where(
+                                  (candidate) => candidate.id == routeId,
+                                );
+                                if (assigned.isNotEmpty &&
+                                    session.setFleetRouteActive(
+                                      routeId,
+                                      !assigned.first.isActive,
+                                    )) {
+                                  onChanged();
+                                }
+                              } else if (value.startsWith('queue:') &&
+                                  session.queueFleetRoute(
+                                    vehicle.id,
+                                    value.substring('queue:'.length),
+                                  )) {
+                                onChanged();
+                              }
+                            }),
                       ),
                       const Icon(
                         Icons.chevron_right_rounded,
@@ -614,11 +681,11 @@ class _FleetPanel extends StatelessWidget {
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: session.farmCredits >= serviceCost
-                            ? () {
+                            ? DebugActionController.instance.actionCallback(() {
                                 if (session.serviceFleetVehicle(vehicle.id)) {
                                   onChanged();
                                 }
-                              }
+                              })
                             : null,
                         icon: const Icon(Icons.build_circle_outlined, size: 17),
                         label: Text(
@@ -778,13 +845,13 @@ class _BuildingsPanel extends StatelessWidget {
                     onPressed:
                         session.farmCredits >=
                             definition.dailyOperatingCostCredits
-                        ? () {
+                        ? DebugActionController.instance.actionCallback(() {
                             if (session.resumeBuildingAfterOperatingCost(
                               building.parcelId,
                             )) {
                               onChanged();
                             }
-                          }
+                          })
                         : null,
                     icon: const Icon(Icons.play_arrow_rounded, size: 17),
                     label: Text(
@@ -801,9 +868,15 @@ class _BuildingsPanel extends StatelessWidget {
 }
 
 class _MarketPanel extends StatelessWidget {
-  const _MarketPanel({required this.session});
+  const _MarketPanel({
+    required this.session,
+    required this.onChanged,
+    required this.findDrivableRoute,
+  });
 
   final OpeningSession session;
+  final VoidCallback onChanged;
+  final DrivableRouteFinder? findDrivableRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -864,16 +937,31 @@ class _MarketPanel extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: _panelGreen,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            icon: const Icon(Icons.storefront_rounded, color: Color(0xFFFFC84F), size: 18),
+            icon: const Icon(
+              Icons.storefront_rounded,
+              color: Color(0xFFFFC84F),
+              size: 18,
+            ),
             label: const Text(
               'BORSA & SEVKİYAT EKRANINI AÇ',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
             ),
-            onPressed: () {
-              MarketTradeSheet.show(context, session, () {});
-            },
+            onPressed: DebugActionController.instance.actionCallback(() {
+              MarketTradeSheet.show(
+                context,
+                session,
+                onChanged,
+                findDrivableRoute,
+              );
+            }),
           ),
         ),
         const SizedBox(height: 10),
@@ -1085,11 +1173,13 @@ class _ContractsPanel extends StatelessWidget {
                     if (contract.status == DeliveryContractStatus.offered)
                       FilledButton(
                         onPressed: canAccept
-                            ? () {
-                                if (session.acceptDeliveryContract(contract.id)) {
+                            ? DebugActionController.instance.actionCallback(() {
+                                if (session.acceptDeliveryContract(
+                                  contract.id,
+                                )) {
                                   onChanged();
                                 }
-                              }
+                              })
                             : null,
                         style: FilledButton.styleFrom(
                           backgroundColor: _panelGreen,
